@@ -15,25 +15,25 @@ class Tokenizer:
         tokenizer_path = hf_hub_download(repo_id, "tokenizer.json")
 
         # Load everything from tokenizer.json
-        with open(tokenizer_path, 'r', encoding='utf-8') as f:
+        with open(tokenizer_path, "r", encoding="utf-8") as f:
             tokenizer_data = json.load(f)
 
         # Extract vocabulary
-        self.vocab = tokenizer_data['model']['vocab']
+        self.vocab = tokenizer_data["model"]["vocab"]
 
         # Build reverse mapping (token_id -> token_string) for decoding
         self.id_to_token = {v: k for k, v in self.vocab.items()}
 
         # Extract and parse merges
         # Format: merge list has ["token1", "token2"] lists
-        merge_list = tokenizer_data['model']['merges']
+        merge_list = tokenizer_data["model"]["merges"]
         self.merges = {}
         for i, merge in enumerate(merge_list):
             if len(merge) == 2:
                 self.merges[tuple(merge)] = i  # Priority is the index
 
         # Extract the pre-tokenization regex pattern
-        pattern_str = tokenizer_data['pre_tokenizer']['pretokenizers'][0]['pattern']['Regex']
+        pattern_str = tokenizer_data["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"]
         self.pattern = re.compile(pattern_str)
 
         # TODO: Extract special tokens
@@ -66,7 +66,7 @@ class Tokenizer:
         pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Test code
     tokenizer = Tokenizer()
     print("Tokenizer created!")
