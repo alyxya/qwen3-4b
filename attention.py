@@ -87,13 +87,13 @@ class Attention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        # Project to Q, K, V using matrix multiplication
-        # x: (batch, seq_len, d_model)
-        # w_q: (num_heads * head_dim, d_model)
-        # q: (batch, seq_len, num_heads * head_dim)
-        q = x @ self.w_q.T  # (batch, seq_len, 4096)
-        k = x @ self.w_k.T  # (batch, seq_len, 1024)
-        v = x @ self.w_v.T  # (batch, seq_len, 1024)
+        # Project to Q, K, V using einsum
+        # x: (batch, seq_len, d_model) - 'bsd'
+        # w_q: (num_heads * head_dim, d_model) - 'hd'
+        # q: (batch, seq_len, num_heads * head_dim) - 'bsh'
+        q = torch.einsum('bsd,hd->bsh', x, self.w_q)  # (batch, seq_len, 4096)
+        k = torch.einsum('bsd,kd->bsk', x, self.w_k)  # (batch, seq_len, 1024)
+        v = torch.einsum('bsd,vd->bsv', x, self.w_v)  # (batch, seq_len, 1024)
 
         # Reshape to separate heads
         q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
@@ -125,9 +125,11 @@ class Attention(nn.Module):
         k = k.repeat_interleave(self.num_queries_per_kv, dim=1)
         v = v.repeat_interleave(self.num_queries_per_kv, dim=1)
 
-        # Compute attention scores
-        # Q @ K^T / sqrt(head_dim)
-        scores = torch.matmul(q, k.transpose(-2, -1))  # (batch, num_heads, seq_len, kv_seq_len)
+        # Compute attention scores using einsum
+        # q: (batch, num_heads, seq_len, head_dim) - 'bhsd'
+        # k: (batch, num_heads, kv_seq_len, head_dim) - 'bhkd'
+        # scores: (batch, num_heads, seq_len, kv_seq_len) - 'bhsk'
+        scores = torch.einsum('bhsd,bhkd->bhsk', q, k)  # (batch, num_heads, seq_len, kv_seq_len)
         scores = scores / (self.head_dim ** 0.5)
 
         # Apply causal mask (prevent attending to future tokens)
@@ -144,18 +146,21 @@ class Attention(nn.Module):
         # Apply softmax
         attn_weights = torch.softmax(scores, dim=-1)
 
-        # Apply attention to values
-        output = torch.matmul(attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
+        # Apply attention to values using einsum
+        # attn_weights: (batch, num_heads, seq_len, kv_seq_len) - 'bhsk'
+        # v: (batch, num_heads, kv_seq_len, head_dim) - 'bhkd'
+        # output: (batch, num_heads, seq_len, head_dim) - 'bhsd'
+        output = torch.einsum('bhsk,bhkd->bhsd', attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
 
         # Transpose back and concatenate heads
         output = output.transpose(1, 2)  # (batch, seq_len, num_heads, head_dim)
         output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
 
-        # Final projection using matrix multiplication
-        # output: (batch, seq_len, num_heads * head_dim) = (batch, seq_len, 4096)
-        # w_o: (d_model, num_heads * head_dim) = (2560, 4096)
-        # result: (batch, seq_len, d_model) = (batch, seq_len, 2560)
-        output = output @ self.w_o.T  # (batch, seq_len, 2560)
+        # Final projection using einsum
+        # output: (batch, seq_len, num_heads * head_dim) - 'bsh'
+        # w_o: (d_model, num_heads * head_dim) - 'dh'
+        # result: (batch, seq_len, d_model) - 'bsd'
+        output = torch.einsum('bsh,dh->bsd', output, self.w_o)  # (batch, seq_len, 2560)
 
         return output, new_cache_k, new_cache_v
 
@@ -266,9 +271,9 @@ if __name__ == "__main__":
     position_ids_test = torch.arange(test_seq_len)
 
     # Manually compute to check mask
-    q = x_test @ test_attn.w_q.T
-    k = x_test @ test_attn.w_k.T
-    v = x_test @ test_attn.w_v.T
+    q = torch.einsum('bsd,hd->bsh', x_test, test_attn.w_q)
+    k = torch.einsum('bsd,kd->bsk', x_test, test_attn.w_k)
+    v = torch.einsum('bsd,vd->bsv', x_test, test_attn.w_v)
 
     q = q.view(1, test_seq_len, test_attn.num_heads, test_attn.head_dim).transpose(1, 2)
     k = k.view(1, test_seq_len, test_attn.num_kv_heads, test_attn.head_dim).transpose(1, 2)
@@ -278,7 +283,7 @@ if __name__ == "__main__":
 
     k_expanded = k.repeat_interleave(test_attn.num_queries_per_kv, dim=1)
 
-    scores = torch.matmul(q, k_expanded.transpose(-2, -1)) / (test_attn.head_dim ** 0.5)
+    scores = torch.einsum('bhsd,bhkd->bhsk', q, k_expanded) / (test_attn.head_dim ** 0.5)
 
     # Apply mask
     kv_seq_len = k_expanded.size(2)
