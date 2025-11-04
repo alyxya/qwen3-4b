@@ -52,10 +52,17 @@ class Tokenizer:
         # Step 1: Pre-tokenize using regex pattern
         chunks = self.pattern.findall(text)
 
-        # TODO: Step 2: Apply BPE to each chunk
-        # TODO: Step 3: Convert tokens to IDs
+        # Step 2: Convert each chunk to bytes
+        all_tokens = []
+        for chunk in chunks:
+            # Convert string to UTF-8 bytes, then to list of individual byte tokens
+            byte_tokens = [bytes([b]) for b in chunk.encode("utf-8")]
+            all_tokens.append(byte_tokens)
 
-        return chunks  # For now, just return chunks to see the output
+        # TODO: Step 3: Apply BPE merges
+        # TODO: Step 4: Convert tokens to IDs
+
+        return all_tokens  # For now, return list of byte token lists
 
     def decode(self, token_ids):
         """
@@ -78,8 +85,10 @@ if __name__ == "__main__":
     print(f"Vocab size: {len(tokenizer.vocab)}")
     print(f"Merges: {len(tokenizer.merges)}")
 
-    # Test encoding (Step 1: pre-tokenization)
+    # Test encoding (Step 2: convert to bytes)
     test_text = "Hello, world!"
     print(f"\nTest text: {repr(test_text)}")
     result = tokenizer.encode(test_text)
-    print(f"Step 1 - Pre-tokenized chunks: {result}")
+    print(f"Step 2 - Byte tokens per chunk:")
+    for i, chunk_tokens in enumerate(result):
+        print(f"  Chunk {i}: {chunk_tokens}")
