@@ -71,6 +71,8 @@ class Attention(nn.Module):
 
         Args:
             x: Input tensor, shape (batch_size, seq_len, d_model)
+               NOTE: All sequences in batch must have same length. For variable-length
+               sequences, pad to same length and use attention_mask (not yet implemented).
             cache_k: Cached key tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
             cache_v: Cached value tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
 
@@ -82,6 +84,9 @@ class Attention(nn.Module):
 
             Note: Cache is always returned. To use caching, pass the returned cache back in the next call.
                   To disable caching, simply don't pass the cache back (pass None).
+
+        TODO: Add attention_mask parameter to support variable-length sequences with padding.
+              This would mask out padded positions in the attention computation.
         """
         batch_size, seq_len, _ = x.shape
 
