@@ -100,14 +100,17 @@ def test_attention_causal_mask(attention_layer, config):
     q = attention_layer.rope(q, position_ids)
     k = attention_layer.rope(k, position_ids)
 
-    k_expanded = k.repeat_interleave(attention_layer.num_queries_per_kv, dim=1)
+    # Reshape q to group queries per KV head (same as in attention.py)
+    q = q.view(batch_size, attention_layer.num_kv_heads, attention_layer.num_queries_per_kv, seq_len, attention_layer.head_dim)
 
-    scores = torch.einsum("bhsd,bhkd->bhsk", q, k_expanded) / (attention_layer.head_dim ** 0.5)
+    # Compute scores with broadcasting
+    scores = torch.einsum("bghsd,bgkd->bghsk", q, k) / (attention_layer.head_dim ** 0.5)
 
     # Apply causal mask
     mask = torch.full((seq_len, seq_len), float("-inf"), device=scores.device)
     mask = torch.triu(mask, diagonal=1)
-    masked_scores = scores[0, 0] + mask
+    # Extract first batch, first kv_head, first query within that group
+    masked_scores = scores[0, 0, 0] + mask
 
     attn_weights = torch.softmax(masked_scores, dim=-1)
 

@@ -126,23 +126,23 @@ class Attention(nn.Module):
         new_cache_k = k
         new_cache_v = v
 
-        # Expand K, V to match number of Q heads (GQA)
-        # Each KV head is repeated num_queries_per_kv times
-        # k: (batch, num_kv_heads, seq_len, head_dim) -> (batch, num_heads, seq_len, head_dim)
-        k = k.repeat_interleave(self.num_queries_per_kv, dim=1)
-        v = v.repeat_interleave(self.num_queries_per_kv, dim=1)
+        # Reshape Q to group queries per KV head for GQA (Grouped Query Attention)
+        # Instead of expanding K,V to match Q heads, we group Q heads per KV head
+        # q: (batch, num_heads, seq_len, head_dim) -> (batch, num_kv_heads, num_queries_per_kv, seq_len, head_dim)
+        q = q.view(batch_size, self.num_kv_heads, self.num_queries_per_kv, seq_len, self.head_dim)
+        # k, v stay as: (batch, num_kv_heads, kv_seq_len, head_dim)
 
-        # Compute attention scores using einsum
-        # q: (batch, num_heads, seq_len, head_dim) - "bhsd"
-        # k: (batch, num_heads, kv_seq_len, head_dim) - "bhkd"
-        # scores: (batch, num_heads, seq_len, kv_seq_len) - "bhsk"
-        scores = torch.einsum("bhsd,bhkd->bhsk", q, k)  # (batch, num_heads, seq_len, kv_seq_len)
+        # Compute attention scores using einsum with broadcasting
+        # q: (batch, kv_heads, queries_per_kv, seq_len, head_dim) - "bghsd"
+        # k: (batch, kv_heads, kv_seq_len, head_dim) - "bgkd"
+        # scores: (batch, kv_heads, queries_per_kv, seq_len, kv_seq_len) - "bghsk"
+        kv_seq_len = k.size(2)
+        scores = torch.einsum("bghsd,bgkd->bghsk", q, k)  # Broadcasting over kv_heads
         scores = scores / (self.head_dim ** 0.5)
 
         # Apply causal mask (prevent attending to future tokens)
         # When generating single tokens with cache (seq_len=1), we attend to all cached tokens
         # When prefill (seq_len > 1), we need causal masking
-        kv_seq_len = k.size(2)
         if seq_len > 1:
             # Create causal mask: upper triangular matrix of -inf
             # Shape: (seq_len, kv_seq_len)
@@ -153,13 +153,14 @@ class Attention(nn.Module):
         # Apply softmax
         attn_weights = torch.softmax(scores, dim=-1)
 
-        # Apply attention to values using einsum
-        # attn_weights: (batch, num_heads, seq_len, kv_seq_len) - "bhsk"
-        # v: (batch, num_heads, kv_seq_len, head_dim) - "bhkd"
-        # output: (batch, num_heads, seq_len, head_dim) - "bhsd"
-        output = torch.einsum("bhsk,bhkd->bhsd", attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
+        # Apply attention to values using einsum with broadcasting
+        # attn_weights: (batch, kv_heads, queries_per_kv, seq_len, kv_seq_len) - "bghsk"
+        # v: (batch, kv_heads, kv_seq_len, head_dim) - "bgkd"
+        # output: (batch, kv_heads, queries_per_kv, seq_len, head_dim) - "bghsd"
+        output = torch.einsum("bghsk,bgkd->bghsd", attn_weights, v)
 
-        # Transpose back and concatenate heads
+        # Reshape back to (batch, num_heads, seq_len, head_dim) then transpose
+        output = output.reshape(batch_size, self.num_heads, seq_len, self.head_dim)
         output = output.transpose(1, 2)  # (batch, seq_len, num_heads, head_dim)
         output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
 
