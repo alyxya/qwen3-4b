@@ -144,8 +144,17 @@ class Tokenizer:
         Returns:
             Decoded string
         """
-        # TODO: Implement decoding
-        pass
+        # Step 1: Convert IDs to tokens (strings)
+        tokens = [self.id_to_token[token_id] for token_id in token_ids]
+
+        # Step 2: Join tokens into a single string
+        text = "".join(tokens)
+
+        # Step 3: Convert from byte-level characters back to UTF-8 bytes
+        byte_array = bytearray([self.byte_decoder[c] for c in text])
+
+        # Step 4: Decode UTF-8 bytes to string
+        return byte_array.decode("utf-8", errors="replace")
 
 
 if __name__ == "__main__":
@@ -155,9 +164,18 @@ if __name__ == "__main__":
     print(f"Vocab size: {len(tokenizer.vocab)}")
     print(f"Merges: {len(tokenizer.merges)}")
 
-    # Test encoding (Complete)
-    test_text = "Hello, world!"
-    print(f"\nTest text: {repr(test_text)}")
-    token_ids = tokenizer.encode(test_text)
-    print(f"Encoded token IDs: {token_ids}")
-    print(f"Number of tokens: {len(token_ids)}")
+    # Test encode and decode
+    test_texts = [
+        "Hello, world!",
+        "The quick brown fox jumps over the lazy dog.",
+        "你好世界",  # Chinese
+        "Hello 👋 World 🌍",  # Emoji
+    ]
+
+    for test_text in test_texts:
+        print(f"\nOriginal: {repr(test_text)}")
+        token_ids = tokenizer.encode(test_text)
+        print(f"Encoded: {token_ids} ({len(token_ids)} tokens)")
+        decoded_text = tokenizer.decode(token_ids)
+        print(f"Decoded: {repr(decoded_text)}")
+        print(f"Match: {'✓' if test_text == decoded_text else '✗'}")
