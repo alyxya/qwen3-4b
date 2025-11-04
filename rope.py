@@ -51,15 +51,18 @@ class RoPE(nn.Module):
         # x shape: (batch_size, num_heads, seq_len, head_dim)
         batch_size, num_heads, seq_len, head_dim = x.shape
 
-        # Ensure position_ids has correct shape
-        if position_ids.dim() == 1:
-            position_ids = position_ids.unsqueeze(0)  # (seq_len,) -> (1, seq_len)
+        # Ensure position_ids has correct shape: (seq_len,)
+        if position_ids.dim() == 2:
+            # If batched (batch_size, seq_len), take first batch
+            # Assumes all batches have same positions (typical for inference)
+            position_ids = position_ids[0]
+        # Now position_ids: (seq_len,)
 
         # Compute the rotation angles for each position
-        # position_ids: (batch_size, seq_len)
+        # position_ids: (seq_len,)
         # inv_freq: (head_dim // 2,)
-        # freqs: (batch_size, seq_len, head_dim // 2)
-        freqs = torch.outer(position_ids[0], self.inv_freq)
+        # freqs: (seq_len, head_dim // 2)
+        freqs = torch.outer(position_ids, self.inv_freq)
 
         # Create the rotation matrix using cos and sin
         # We'll apply: [cos, -sin; sin, cos] rotation to pairs of dimensions
@@ -127,3 +130,16 @@ if __name__ == "__main__":
     print(f"\nFirst position, first head (first 10 values):")
     print(f"  Before RoPE: {test_x[0, 0, 0, :10]}")
     print(f"  After RoPE:  {output[0, 0, 0, :10]}")
+
+    # Test with batched position_ids
+    print(f"\n" + "=" * 50)
+    print("Testing with batched position_ids:")
+    print("=" * 50)
+
+    batched_position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+    print(f"Batched position_ids shape: {batched_position_ids.shape}")
+    print(f"Batched position_ids:\n{batched_position_ids}")
+
+    output_batched = rope(test_x, batched_position_ids)
+    print(f"Output shape: {output_batched.shape}")
+    print(f"Same as non-batched: {torch.allclose(output, output_batched)}")
