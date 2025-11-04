@@ -49,8 +49,13 @@ class Tokenizer:
         Returns:
             List of token IDs
         """
-        # TODO: Implement encoding
-        pass
+        # Step 1: Pre-tokenize using regex pattern
+        chunks = self.pattern.findall(text)
+
+        # TODO: Step 2: Apply BPE to each chunk
+        # TODO: Step 3: Convert tokens to IDs
+
+        return chunks  # For now, just return chunks to see the output
 
     def decode(self, token_ids):
         """
@@ -73,8 +78,8 @@ if __name__ == "__main__":
     print(f"Vocab size: {len(tokenizer.vocab)}")
     print(f"Merges: {len(tokenizer.merges)}")
 
-    # Test pre-tokenization
-    test_text = "Hello, world! I'm testing."
-    matches = tokenizer.pattern.findall(test_text)
-    print(f"\nPre-tokenization test: {repr(test_text)}")
-    print(f"Chunks: {matches}")
+    # Test encoding (Step 1: pre-tokenization)
+    test_text = "Hello, world!"
+    print(f"\nTest text: {repr(test_text)}")
+    result = tokenizer.encode(test_text)
+    print(f"Step 1 - Pre-tokenized chunks: {result}")
