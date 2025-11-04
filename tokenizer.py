@@ -39,6 +39,28 @@ class Tokenizer:
         # TODO: Extract special tokens
         self.special_tokens = {}
 
+        # Build byte-to-unicode mapping (GPT-2 style byte-level BPE)
+        self.byte_encoder = self._build_byte_encoder()
+        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+
+    def _build_byte_encoder(self):
+        """
+        Build mapping from bytes to unicode characters for byte-level BPE
+        This avoids having to deal with control characters and ensures
+        all bytes map to printable characters.
+        """
+        # Printable ASCII (not including control chars)
+        bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        cs = bs[:]
+        n = 0
+        # Map remaining bytes to unused unicode chars
+        for b in range(2**8):
+            if b not in bs:
+                bs.append(b)
+                cs.append(2**8 + n)
+                n += 1
+        return dict(zip(bs, [chr(c) for c in cs]))
+
     def _apply_bpe(self, word):
         """
         Apply BPE merges to a list of string tokens
@@ -94,8 +116,8 @@ class Tokenizer:
         # Step 2: Convert each chunk to list of individual byte characters
         all_tokens = []
         for chunk in chunks:
-            # Convert to UTF-8 bytes, then each byte to a character
-            byte_chars = [chr(b) for b in chunk.encode("utf-8")]
+            # Convert to UTF-8 bytes, then use byte encoder mapping
+            byte_chars = [self.byte_encoder[b] for b in chunk.encode("utf-8")]
             all_tokens.append(byte_chars)
 
         # Step 3: Apply BPE merges to each chunk
@@ -104,9 +126,13 @@ class Tokenizer:
             bpe_tokens = self._apply_bpe(byte_chars)
             merged_tokens.append(bpe_tokens)
 
-        # TODO: Step 4: Convert tokens to IDs
+        # Step 4: Convert tokens to IDs
+        token_ids = []
+        for chunk_tokens in merged_tokens:
+            for token in chunk_tokens:
+                token_ids.append(self.vocab[token])
 
-        return merged_tokens  # For now, return list of merged token lists
+        return token_ids
 
     def decode(self, token_ids):
         """
@@ -129,10 +155,9 @@ if __name__ == "__main__":
     print(f"Vocab size: {len(tokenizer.vocab)}")
     print(f"Merges: {len(tokenizer.merges)}")
 
-    # Test encoding (Step 3: apply BPE merges)
+    # Test encoding (Complete)
     test_text = "Hello, world!"
     print(f"\nTest text: {repr(test_text)}")
-    result = tokenizer.encode(test_text)
-    print(f"Step 3 - BPE merged tokens per chunk:")
-    for i, chunk_tokens in enumerate(result):
-        print(f"  Chunk {i}: {chunk_tokens}")
+    token_ids = tokenizer.encode(test_text)
+    print(f"Encoded token IDs: {token_ids}")
+    print(f"Number of tokens: {len(token_ids)}")
