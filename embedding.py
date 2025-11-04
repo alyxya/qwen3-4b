@@ -45,27 +45,3 @@ class Embedding(nn.Module):
         # This is all nn.Embedding does: index into the weight matrix!
         # token_ids are used as indices to select rows from self.weight
         return self.weight[token_ids]
-
-
-if __name__ == "__main__":
-    # Test the embedding layer
-    from model import load_config
-
-    config = load_config()
-    vocab_size: int = config["vocab_size"]
-    d_model: int = config["hidden_size"]
-
-    print("Testing Embedding Layer:")
-    print("=" * 50)
-
-    embedding = Embedding(vocab_size, d_model)
-
-    # Test with some token IDs
-    test_token_ids = torch.tensor([151643, 9707, 151645])  # Example: BOS, "Hello", EOS
-
-    embeddings = embedding(test_token_ids)
-
-    print(f"Input token IDs: {test_token_ids.tolist()}")
-    print(f"Output shape: {embeddings.shape}")
-    print(f"Expected shape: torch.Size([{len(test_token_ids)}, {d_model}])")
-    print(f"First embedding (first 10 values): {embeddings[0, :10]}")
