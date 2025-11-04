@@ -66,7 +66,7 @@ class Attention(nn.Module):
         position_ids: torch.Tensor,
         cache_k: torch.Tensor | None = None,
         cache_v: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass with optional KV caching
 
