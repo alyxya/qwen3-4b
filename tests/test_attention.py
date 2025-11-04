@@ -39,9 +39,8 @@ def test_attention_prefill(attention_layer, config):
     d_model = config["hidden_size"]
 
     x = torch.randn(batch_size, seq_len, d_model)
-    position_ids = torch.arange(seq_len)
 
-    output, cache_k, cache_v = attention_layer(x, position_ids)
+    output, cache_k, cache_v = attention_layer(x)
 
     # Check output shape
     assert output.shape == (batch_size, seq_len, d_model)
@@ -61,19 +60,17 @@ def test_attention_with_cache(attention_layer, config):
     # Prefill with prompt
     prompt_len = 3
     x_prompt = torch.randn(batch_size, prompt_len, d_model)
-    position_ids_prompt = torch.arange(prompt_len)
 
-    output_prompt, cache_k, cache_v = attention_layer(x_prompt, position_ids_prompt)
+    output_prompt, cache_k, cache_v = attention_layer(x_prompt)
 
     assert output_prompt.shape == (batch_size, prompt_len, d_model)
     assert cache_k.shape[2] == prompt_len  # Cache seq_len matches prompt
 
     # Generate next token using cache
     next_token = torch.randn(batch_size, 1, d_model)
-    position_ids_next = torch.tensor([prompt_len])
 
     output_next, cache_k_new, cache_v_new = attention_layer(
-        next_token, position_ids_next, cache_k=cache_k, cache_v=cache_v
+        next_token, cache_k=cache_k, cache_v=cache_v
     )
 
     assert output_next.shape == (batch_size, 1, d_model)
@@ -88,7 +85,7 @@ def test_attention_causal_mask(attention_layer, config):
     d_model = config["hidden_size"]
 
     x = torch.randn(batch_size, seq_len, d_model)
-    position_ids = torch.arange(seq_len)
+    position_ids = torch.arange(seq_len, device=x.device)
 
     # Manually compute attention to inspect weights
     q = torch.einsum("bsd,hd->bsh", x, attention_layer.w_q)

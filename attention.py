@@ -63,7 +63,6 @@ class Attention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        position_ids: torch.Tensor,
         cache_k: torch.Tensor | None = None,
         cache_v: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -72,7 +71,6 @@ class Attention(nn.Module):
 
         Args:
             x: Input tensor, shape (batch_size, seq_len, d_model)
-            position_ids: Position indices, shape (seq_len,) or (batch_size, seq_len)
             cache_k: Cached key tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
             cache_v: Cached value tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
 
@@ -86,6 +84,15 @@ class Attention(nn.Module):
                   To disable caching, simply don't pass the cache back (pass None).
         """
         batch_size, seq_len, _ = x.shape
+
+        # Derive position_ids automatically from cache
+        if cache_k is not None:
+            # Continue from where cache left off
+            start_pos = cache_k.shape[2]
+            position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)
+        else:
+            # Start from position 0
+            position_ids = torch.arange(seq_len, device=x.device)
 
         # Project to Q, K, V using einsum
         # x: (batch, seq_len, d_model) - "bsd"
