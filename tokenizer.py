@@ -178,4 +178,4 @@ if __name__ == "__main__":
         print(f"Encoded: {token_ids} ({len(token_ids)} tokens)")
         decoded_text = tokenizer.decode(token_ids)
         print(f"Decoded: {repr(decoded_text)}")
-        print(f"Match: {"✓" if test_text == decoded_text else "✗"}")
+        print(f"Match: {'✓' if test_text == decoded_text else '✗'}")
