@@ -29,21 +29,24 @@ class Qwen3Model(nn.Module):
         self.max_position_embeddings = config["max_position_embeddings"]
         self.head_dim = config["head_dim"]
 
-        self.embed_tokens = Embedding(self.vocab_size, self.d_model)
-        self.layers = nn.ModuleList([
-            TransformerBlock(
-                d_model=self.d_model,
-                num_heads=self.num_heads,
-                num_kv_heads=self.num_kv_heads,
-                head_dim=self.head_dim,
-                intermediate_size=config["intermediate_size"],
-                max_position_embeddings=config["max_position_embeddings"],
-                rope_theta=config["rope_theta"],
-                rms_norm_eps=config["rms_norm_eps"],
-            )
-            for _ in range(self.num_layers)
-        ])
-        self.norm = RMSNorm(self.d_model, eps=config["rms_norm_eps"])
+        # Use meta device to avoid allocating memory for initial weights
+        # that will be immediately overwritten by pretrained weights
+        with torch.device("meta"):
+            self.embed_tokens = Embedding(self.vocab_size, self.d_model)
+            self.layers = nn.ModuleList([
+                TransformerBlock(
+                    d_model=self.d_model,
+                    num_heads=self.num_heads,
+                    num_kv_heads=self.num_kv_heads,
+                    head_dim=self.head_dim,
+                    intermediate_size=config["intermediate_size"],
+                    max_position_embeddings=config["max_position_embeddings"],
+                    rope_theta=config["rope_theta"],
+                    rms_norm_eps=config["rms_norm_eps"],
+                )
+                for _ in range(self.num_layers)
+            ])
+            self.norm = RMSNorm(self.d_model, eps=config["rms_norm_eps"])
 
         # Load pretrained weights
         print("Loading pretrained weights from HuggingFace...")
@@ -67,9 +70,13 @@ class Qwen3Model(nn.Module):
             else:
                 mapped_weights[name] = tensor
 
-        # Load weights into the model
+        # Load weights directly into the model
+        # assign=True replaces the meta tensor parameters with the loaded tensors
+        # (no copying or extra allocation needed)
         # strict=False allows missing keys (lm_head will be handled separately)
-        missing_keys, unexpected_keys = self.load_state_dict(mapped_weights, strict=False)
+        missing_keys, unexpected_keys = self.load_state_dict(
+            mapped_weights, strict=False, assign=True
+        )
 
         # Handle lm_head with weight tying (shares weights with embed_tokens)
         # Qwen3 uses weight tying, so lm_head uses the same weights as embed_tokens
