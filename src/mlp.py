@@ -37,13 +37,19 @@ class MLP(nn.Module):
         # Projection layers to match HuggingFace naming
         # Using nn.Linear without bias to match pretrained weights
         # gate_proj: projects from d_model to intermediate_size
-        self.gate_proj = nn.Linear(d_model, intermediate_size, bias=False)  # (2560 -> 9728)
+        self.gate_proj = nn.Linear(
+            d_model, intermediate_size, bias=False
+        )  # (2560 -> 9728)
 
         # up_proj: projects from d_model to intermediate_size
-        self.up_proj = nn.Linear(d_model, intermediate_size, bias=False)  # (2560 -> 9728)
+        self.up_proj = nn.Linear(
+            d_model, intermediate_size, bias=False
+        )  # (2560 -> 9728)
 
         # down_proj: projects from intermediate_size back to d_model
-        self.down_proj = nn.Linear(intermediate_size, d_model, bias=False)  # (9728 -> 2560)
+        self.down_proj = nn.Linear(
+            intermediate_size, d_model, bias=False
+        )  # (9728 -> 2560)
 
         # SiLU activation (also called Swish)
         self.activation = nn.SiLU()
@@ -72,4 +78,3 @@ class MLP(nn.Module):
         output = self.down_proj(hidden)  # (batch, seq, dim) = (batch, seq, 2560)
 
         return output
-

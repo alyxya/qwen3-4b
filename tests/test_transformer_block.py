@@ -53,7 +53,7 @@ def test_rmsnorm_normalizes(rms_norm):
     output = rms_norm(x)
 
     # RMS of output should be close to 1 (before scaling by weight)
-    rms_output = torch.sqrt(torch.mean(output ** 2, dim=-1))
+    rms_output = torch.sqrt(torch.mean(output**2, dim=-1))
 
     # The RMS won't be exactly 1 because of the weight parameter
     # but it should be controlled

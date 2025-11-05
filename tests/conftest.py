@@ -24,6 +24,7 @@ def model():
     Tests that don't use this fixture won't trigger model loading.
     """
     from src.model import Qwen3Model
+
     return Qwen3Model()
 
 
@@ -35,4 +36,5 @@ def tokenizer():
     Only loaded once when first needed by any test that uses this fixture.
     """
     from src.tokenizer import Tokenizer
+
     return Tokenizer()

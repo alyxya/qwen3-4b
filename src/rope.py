@@ -35,7 +35,9 @@ class RoPE(nn.Module):
         # For each pair of dimensions, we have a different frequency
         # Shape: (head_dim // 2,)
         # Compute in float32 for accuracy, then convert to bfloat16 to match model weights
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, head_dim, 2, device="cpu") / head_dim))
+        inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, head_dim, 2, device="cpu") / head_dim)
+        )
         inv_freq = inv_freq.to(torch.bfloat16)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -50,7 +52,9 @@ class RoPE(nn.Module):
         Returns:
             Rotated tensor of same shape as input
         """
-        batch_size, num_heads, seq_len, head_dim = x.shape  # x: (batch, heads, seq, head_dim)
+        batch_size, num_heads, seq_len, head_dim = (
+            x.shape
+        )  # x: (batch, heads, seq, head_dim)
 
         # Ensure position_ids has correct shape: (seq_len,)
         if position_ids.dim() == 2:
@@ -69,11 +73,13 @@ class RoPE(nn.Module):
         sin = freqs.sin()  # (seq, head_dim//2)
 
         # Reshape x to separate even and odd dimensions
-        x_reshaped = x.reshape(batch_size, num_heads, seq_len, head_dim // 2, 2)  # (batch, heads, seq, head_dim//2, 2)
+        x_reshaped = x.reshape(
+            batch_size, num_heads, seq_len, head_dim // 2, 2
+        )  # (batch, heads, seq, head_dim//2, 2)
 
         # Extract even and odd elements
         x_even = x_reshaped[..., 0]  # (batch, heads, seq, head_dim//2)
-        x_odd = x_reshaped[..., 1]   # (batch, heads, seq, head_dim//2)
+        x_odd = x_reshaped[..., 1]  # (batch, heads, seq, head_dim//2)
 
         # Broadcast cos/sin to match x shape
         cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim//2)
@@ -81,10 +87,14 @@ class RoPE(nn.Module):
 
         # Apply rotation: [cos*x_even - sin*x_odd, sin*x_even + cos*x_odd]
         x_rotated_even = cos * x_even - sin * x_odd  # (batch, heads, seq, head_dim//2)
-        x_rotated_odd = sin * x_even + cos * x_odd   # (batch, heads, seq, head_dim//2)
+        x_rotated_odd = sin * x_even + cos * x_odd  # (batch, heads, seq, head_dim//2)
 
         # Recombine into original shape
-        x_rotated = torch.stack([x_rotated_even, x_rotated_odd], dim=-1)  # (batch, heads, seq, head_dim//2, 2)
-        x_rotated = x_rotated.reshape(batch_size, num_heads, seq_len, head_dim)  # (batch, heads, seq, head_dim)
+        x_rotated = torch.stack(
+            [x_rotated_even, x_rotated_odd], dim=-1
+        )  # (batch, heads, seq, head_dim//2, 2)
+        x_rotated = x_rotated.reshape(
+            batch_size, num_heads, seq_len, head_dim
+        )  # (batch, heads, seq, head_dim)
 
         return x_rotated

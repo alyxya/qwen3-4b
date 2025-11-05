@@ -1,9 +1,11 @@
 """
 Minimal tokenizer for Qwen3 4B - Built for inference
 """
+
 import json
 import regex as re
 from huggingface_hub import hf_hub_download
+
 
 class Tokenizer:
     """Minimal BPE tokenizer for Qwen3 models"""
@@ -33,7 +35,9 @@ class Tokenizer:
                 self.merges[tuple(merge)] = i  # Priority is the index
 
         # Extract the pre-tokenization regex pattern
-        pattern_str: str = tokenizer_data["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"]
+        pattern_str: str = tokenizer_data["pre_tokenizer"]["pretokenizers"][0][
+            "pattern"
+        ]["Regex"]
         self.pattern: re.Pattern = re.compile(pattern_str)
 
         # Special tokens (e.g., <|endoftext|>, <|im_start|>, <|im_end|>) available in
@@ -51,7 +55,11 @@ class Tokenizer:
         all bytes map to printable characters.
         """
         # Printable ASCII (not including control chars)
-        bs: list[int] = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        bs: list[int] = (
+            list(range(ord("!"), ord("~") + 1))
+            + list(range(ord("¡"), ord("¬") + 1))
+            + list(range(ord("®"), ord("ÿ") + 1))
+        )
         cs: list[int] = bs[:]
         n: int = 0
         # Map remaining bytes to unused unicode chars
@@ -75,10 +83,14 @@ class Tokenizer:
         # Keep merging until no more merges are possible
         while len(word) > 1:
             # Find all adjacent pairs
-            pairs: list[tuple[str, str]] = [(word[i], word[i + 1]) for i in range(len(word) - 1)]
+            pairs: list[tuple[str, str]] = [
+                (word[i], word[i + 1]) for i in range(len(word) - 1)
+            ]
 
             # Find the pair with highest priority (lowest index in merges)
-            best_pair: tuple[str, str] = min(pairs, key=lambda pair: self.merges.get(tuple(pair), float("inf")))
+            best_pair: tuple[str, str] = min(
+                pairs, key=lambda pair: self.merges.get(tuple(pair), float("inf"))
+            )
 
             # If no pairs can be merged, we're done
             if tuple(best_pair) not in self.merges:
@@ -118,7 +130,9 @@ class Tokenizer:
         all_tokens: list[list[str]] = []
         for chunk in chunks:
             # Convert to UTF-8 bytes, then use byte encoder mapping
-            byte_chars: list[str] = [self.byte_encoder[b] for b in chunk.encode("utf-8")]
+            byte_chars: list[str] = [
+                self.byte_encoder[b] for b in chunk.encode("utf-8")
+            ]
             all_tokens.append(byte_chars)
 
         # Step 3: Apply BPE merges to each chunk

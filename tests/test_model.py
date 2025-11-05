@@ -119,11 +119,11 @@ def test_model_forward_with_cache(model, config):
     # Second forward pass with cache (single token)
     next_token = torch.randint(0, config["vocab_size"], (batch_size, 1))
     with torch.no_grad():
-        logits2, cache_k2, cache_v2 = model(next_token, cache_k=cache_k, cache_v=cache_v)
+        logits2, cache_k2, cache_v2 = model(
+            next_token, cache_k=cache_k, cache_v=cache_v
+        )
 
     # Check that cache grew
     assert cache_k2[0].shape[2] == seq_len + 1  # seq_len dimension should grow
     assert cache_v2[0].shape[2] == seq_len + 1
     assert logits2.shape == (batch_size, 1, config["vocab_size"])
-
-

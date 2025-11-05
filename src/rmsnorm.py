@@ -35,5 +35,5 @@ class RMSNorm(nn.Module):
         Returns:
             Tensor with the same shape as the input.
         """
-        rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps)  # (..., 1)
+        rms = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)  # (..., 1)
         return self.weight * (x / rms)  # (..., dim)

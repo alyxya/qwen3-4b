@@ -31,7 +31,9 @@ def test_simple_generation(model, tokenizer):
     with torch.no_grad():
         for _ in range(max_new_tokens):
             # Forward pass
-            logits, cache_k, cache_v = model(input_tensor, cache_k=cache_k, cache_v=cache_v)
+            logits, cache_k, cache_v = model(
+                input_tensor, cache_k=cache_k, cache_v=cache_v
+            )
 
             # Get the next token (greedy decoding - pick most likely)
             next_token_id = logits[0, -1, :].argmax().item()
@@ -87,7 +89,9 @@ def test_generation_with_cache(model, tokenizer):
                 # Subsequent passes - single token with cache
                 current_ids = torch.tensor([[generated_ids_with_cache[-1]]])
 
-            logits, cache_k, cache_v = model(current_ids, cache_k=cache_k, cache_v=cache_v)
+            logits, cache_k, cache_v = model(
+                current_ids, cache_k=cache_k, cache_v=cache_v
+            )
             next_token_id = logits[0, -1, :].argmax().item()
             generated_ids_with_cache.append(next_token_id)
 
@@ -133,7 +137,9 @@ def test_batch_generation(model, tokenizer):
             batch_tensor = torch.cat([batch_tensor, next_tokens.unsqueeze(1)], dim=1)
 
     # Decode both sequences
-    generated_texts = [tokenizer.decode(batch_tensor[i].tolist()) for i in range(len(prompts))]
+    generated_texts = [
+        tokenizer.decode(batch_tensor[i].tolist()) for i in range(len(prompts))
+    ]
 
     # Verify both generated text
     for prompt, generated in zip(prompts, generated_texts):
@@ -160,7 +166,9 @@ def test_mathematical_reasoning(model, tokenizer):
 
     with torch.no_grad():
         for _ in range(max_new_tokens):
-            logits, cache_k, cache_v = model(input_tensor, cache_k=cache_k, cache_v=cache_v)
+            logits, cache_k, cache_v = model(
+                input_tensor, cache_k=cache_k, cache_v=cache_v
+            )
             next_token_id = logits[0, -1, :].argmax().item()
             generated_ids.append(next_token_id)
             input_tensor = torch.tensor([[next_token_id]])

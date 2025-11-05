@@ -43,8 +43,18 @@ def test_attention_prefill(attention_layer, config):
     # Check cache is returned
     assert cache_k is not None
     assert cache_v is not None
-    assert cache_k.shape == (batch_size, config["num_key_value_heads"], seq_len, config["head_dim"])
-    assert cache_v.shape == (batch_size, config["num_key_value_heads"], seq_len, config["head_dim"])
+    assert cache_k.shape == (
+        batch_size,
+        config["num_key_value_heads"],
+        seq_len,
+        config["head_dim"],
+    )
+    assert cache_v.shape == (
+        batch_size,
+        config["num_key_value_heads"],
+        seq_len,
+        config["head_dim"],
+    )
 
 
 def test_attention_with_cache(attention_layer, config):
@@ -87,7 +97,9 @@ def test_attention_causal_mask(attention_layer, config):
     k = attention_layer.k_proj(x)
 
     q = q.view(batch_size, seq_len, attention_layer.num_heads, attention_layer.head_dim)
-    k = k.view(batch_size, seq_len, attention_layer.num_kv_heads, attention_layer.head_dim)
+    k = k.view(
+        batch_size, seq_len, attention_layer.num_kv_heads, attention_layer.head_dim
+    )
 
     q = q.transpose(1, 2)
     k = k.transpose(1, 2)
@@ -96,10 +108,16 @@ def test_attention_causal_mask(attention_layer, config):
     k = attention_layer.rope(k, position_ids)
 
     # Reshape q to group queries per KV head (same as in attention.py)
-    q = q.view(batch_size, attention_layer.num_kv_heads, attention_layer.num_queries_per_kv, seq_len, attention_layer.head_dim)
+    q = q.view(
+        batch_size,
+        attention_layer.num_kv_heads,
+        attention_layer.num_queries_per_kv,
+        seq_len,
+        attention_layer.head_dim,
+    )
 
     # Compute scores with broadcasting
-    scores = torch.einsum("bghsd,bgkd->bghsk", q, k) / (attention_layer.head_dim ** 0.5)
+    scores = torch.einsum("bghsd,bgkd->bghsk", q, k) / (attention_layer.head_dim**0.5)
 
     # Apply causal mask
     mask = torch.full((seq_len, seq_len), float("-inf"), device=scores.device)
@@ -120,4 +138,7 @@ def test_attention_gqa_expansion(attention_layer, config):
     assert attention_layer.num_queries_per_kv == num_queries_per_kv
 
     # Each KV head should be shared by num_queries_per_kv query heads
-    assert config["num_attention_heads"] == config["num_key_value_heads"] * num_queries_per_kv
+    assert (
+        config["num_attention_heads"]
+        == config["num_key_value_heads"] * num_queries_per_kv
+    )

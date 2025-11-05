@@ -23,6 +23,7 @@ def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]
         first_file = hf_hub_download(repo_id, "model.safetensors.index.json")
 
         import json
+
         with open(first_file, "r") as f:
             index = json.load(f)
 
@@ -34,7 +35,9 @@ def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]
         return ["model.safetensors"]
 
 
-def load_weights(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> dict[str, torch.Tensor]:
+def load_weights(
+    repo_id: str = "Qwen/Qwen3-4B-Instruct-2507",
+) -> dict[str, torch.Tensor]:
     """
     Load all model weights from HuggingFace
 

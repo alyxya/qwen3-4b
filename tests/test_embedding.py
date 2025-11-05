@@ -8,17 +8,17 @@ from src.embedding import Embedding
 @pytest.fixture
 def embedding_layer(config):
     """Create embedding layer"""
-    return Embedding(
-        vocab_size=config["vocab_size"],
-        d_model=config["hidden_size"]
-    )
+    return Embedding(vocab_size=config["vocab_size"], d_model=config["hidden_size"])
 
 
 def test_embedding_creation(embedding_layer, config):
     """Test that embedding layer is created with correct dimensions"""
     assert embedding_layer.vocab_size == config["vocab_size"]
     assert embedding_layer.d_model == config["hidden_size"]
-    assert embedding_layer.embedding.weight.shape == (config["vocab_size"], config["hidden_size"])
+    assert embedding_layer.embedding.weight.shape == (
+        config["vocab_size"],
+        config["hidden_size"],
+    )
 
 
 def test_embedding_forward(embedding_layer, config):
@@ -51,11 +51,7 @@ def test_embedding_batch(embedding_layer):
     """Test embedding with batched input"""
     batch_size = 3
     seq_len = 4
-    token_ids = torch.tensor([
-        [1, 2, 3, 4],
-        [5, 6, 7, 8],
-        [9, 10, 11, 12]
-    ])
+    token_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
 
     output = embedding_layer(token_ids)
 

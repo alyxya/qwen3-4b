@@ -33,19 +33,21 @@ class Qwen3Model(nn.Module):
         # that will be immediately overwritten by pretrained weights
         with torch.device("meta"):
             self.embed_tokens = Embedding(self.vocab_size, self.d_model)
-            self.layers = nn.ModuleList([
-                TransformerBlock(
-                    d_model=self.d_model,
-                    num_heads=self.num_heads,
-                    num_kv_heads=self.num_kv_heads,
-                    head_dim=self.head_dim,
-                    intermediate_size=config["intermediate_size"],
-                    max_position_embeddings=config["max_position_embeddings"],
-                    rope_theta=config["rope_theta"],
-                    rms_norm_eps=config["rms_norm_eps"],
-                )
-                for _ in range(self.num_layers)
-            ])
+            self.layers = nn.ModuleList(
+                [
+                    TransformerBlock(
+                        d_model=self.d_model,
+                        num_heads=self.num_heads,
+                        num_kv_heads=self.num_kv_heads,
+                        head_dim=self.head_dim,
+                        intermediate_size=config["intermediate_size"],
+                        max_position_embeddings=config["max_position_embeddings"],
+                        rope_theta=config["rope_theta"],
+                        rms_norm_eps=config["rms_norm_eps"],
+                    )
+                    for _ in range(self.num_layers)
+                ]
+            )
             self.norm = RMSNorm(self.d_model, eps=config["rms_norm_eps"])
 
         # Load pretrained weights
@@ -115,7 +117,9 @@ class Qwen3Model(nn.Module):
             new_cache_v.append(new_v)
 
         hidden_states = self.norm(hidden_states)  # (batch, seq, dim)
-        logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)  # (batch, seq, vocab)
+        logits = torch.einsum(
+            "bsd,vd->bsv", hidden_states, self.lm_head
+        )  # (batch, seq, vocab)
 
         return logits, new_cache_k, new_cache_v
 
@@ -197,12 +201,16 @@ class Qwen3Model(nn.Module):
             if cache_k is None and len(uncached_tokens) > 0:
                 # Prefill: process all uncached tokens at once (efficient)
                 input_tensor = torch.tensor([uncached_tokens])
-                logits, cache_k, cache_v = self(input_tensor, cache_k=None, cache_v=None)
+                logits, cache_k, cache_v = self(
+                    input_tensor, cache_k=None, cache_v=None
+                )
             else:
                 # Add new tokens incrementally to existing cache
                 for token_id in uncached_tokens:
                     input_tensor = torch.tensor([[token_id]])
-                    logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
+                    logits, cache_k, cache_v = self(
+                        input_tensor, cache_k=cache_k, cache_v=cache_v
+                    )
 
             # Now cache contains all input_ids and we have logits from the last token
             # Generate new tokens one at a time
@@ -219,7 +227,9 @@ class Qwen3Model(nn.Module):
                 if top_k is not None:
                     top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
                     # Set all other logits to -inf
-                    next_token_logits = torch.full_like(next_token_logits, float("-inf"))
+                    next_token_logits = torch.full_like(
+                        next_token_logits, float("-inf")
+                    )
                     next_token_logits[top_k_indices] = top_k_logits
 
                 # Convert to probabilities
@@ -249,6 +259,8 @@ class Qwen3Model(nn.Module):
 
                 # Process this token to get next logits
                 input_tensor = torch.tensor([[next_token_id]])
-                logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
+                logits, cache_k, cache_v = self(
+                    input_tensor, cache_k=cache_k, cache_v=cache_v
+                )
 
         return new_tokens, cache_k, cache_v

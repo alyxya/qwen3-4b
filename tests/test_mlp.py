@@ -9,8 +9,7 @@ from src.mlp import MLP
 def mlp_layer(config):
     """Create MLP layer"""
     return MLP(
-        d_model=config["hidden_size"],
-        intermediate_size=config["intermediate_size"]
+        d_model=config["hidden_size"], intermediate_size=config["intermediate_size"]
     )
 
 
@@ -18,9 +17,18 @@ def test_mlp_creation(mlp_layer, config):
     """Test that MLP layer is created with correct dimensions"""
     assert mlp_layer.d_model == config["hidden_size"]
     assert mlp_layer.intermediate_size == config["intermediate_size"]
-    assert mlp_layer.gate_proj.weight.shape == (config["intermediate_size"], config["hidden_size"])
-    assert mlp_layer.up_proj.weight.shape == (config["intermediate_size"], config["hidden_size"])
-    assert mlp_layer.down_proj.weight.shape == (config["hidden_size"], config["intermediate_size"])
+    assert mlp_layer.gate_proj.weight.shape == (
+        config["intermediate_size"],
+        config["hidden_size"],
+    )
+    assert mlp_layer.up_proj.weight.shape == (
+        config["intermediate_size"],
+        config["hidden_size"],
+    )
+    assert mlp_layer.down_proj.weight.shape == (
+        config["hidden_size"],
+        config["intermediate_size"],
+    )
 
 
 def test_mlp_forward(mlp_layer, config):
