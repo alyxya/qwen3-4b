@@ -2,7 +2,7 @@
 
 import torch
 import pytest
-from mlp import MLP
+from src.mlp import MLP
 
 
 @pytest.fixture

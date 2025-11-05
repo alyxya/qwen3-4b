@@ -2,7 +2,7 @@
 
 import torch
 import pytest
-from embedding import Embedding
+from src.embedding import Embedding
 
 
 @pytest.fixture

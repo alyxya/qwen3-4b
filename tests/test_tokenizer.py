@@ -1,7 +1,7 @@
 """Tests for tokenizer"""
 
 import pytest
-from tokenizer import Tokenizer
+from src.tokenizer import Tokenizer
 
 
 @pytest.fixture

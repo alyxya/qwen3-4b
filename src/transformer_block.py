@@ -10,9 +10,9 @@ A single transformer layer consists of:
 
 import torch
 import torch.nn as nn
-from attention import Attention
-from mlp import MLP
-from rmsnorm import RMSNorm
+from .attention import Attention
+from .mlp import MLP
+from .rmsnorm import RMSNorm
 
 
 class TransformerBlock(nn.Module):

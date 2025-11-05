@@ -3,8 +3,8 @@
 import torch
 import torch.nn as nn
 import pytest
-from rmsnorm import RMSNorm
-from transformer_block import TransformerBlock
+from src.rmsnorm import RMSNorm
+from src.transformer_block import TransformerBlock
 
 
 @pytest.fixture

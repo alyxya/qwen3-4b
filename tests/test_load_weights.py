@@ -1,7 +1,7 @@
 """Tests for weight loading functionality"""
 
 import pytest
-from load_weights import list_weight_files
+from src.load_weights import list_weight_files
 
 
 def test_list_weight_files():

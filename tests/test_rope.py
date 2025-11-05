@@ -2,7 +2,7 @@
 
 import torch
 import pytest
-from rope import RoPE
+from src.rope import RoPE
 
 
 @pytest.fixture

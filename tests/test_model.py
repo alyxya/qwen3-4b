@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from model import Qwen3Model
+from src.model import Qwen3Model
 
 
 @pytest.fixture(scope="module")

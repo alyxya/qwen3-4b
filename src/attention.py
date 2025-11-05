@@ -8,8 +8,8 @@ GQA uses fewer Key/Value heads than Query heads to save memory:
 
 import torch
 import torch.nn as nn
-from rmsnorm import RMSNorm
-from rope import RoPE
+from .rmsnorm import RMSNorm
+from .rope import RoPE
 
 
 class Attention(nn.Module):

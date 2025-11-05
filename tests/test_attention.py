@@ -2,7 +2,7 @@
 
 import torch
 import pytest
-from attention import Attention
+from src.attention import Attention
 
 
 @pytest.fixture

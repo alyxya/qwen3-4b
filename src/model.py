@@ -5,10 +5,10 @@ import torch
 import torch.nn as nn
 from huggingface_hub import hf_hub_download
 
-from embedding import Embedding
-from transformer_block import TransformerBlock
-from rmsnorm import RMSNorm
-from load_weights import load_weights
+from .embedding import Embedding
+from .transformer_block import TransformerBlock
+from .rmsnorm import RMSNorm
+from .load_weights import load_weights
 
 
 class Qwen3Model(nn.Module):
