@@ -2,14 +2,7 @@
 
 import torch
 import pytest
-from model import load_config
 from attention import Attention
-
-
-@pytest.fixture
-def config():
-    """Load model config"""
-    return load_config()
 
 
 @pytest.fixture

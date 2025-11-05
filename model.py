@@ -12,17 +12,6 @@ from transformer_block import TransformerBlock
 from rmsnorm import RMSNorm
 
 
-def load_config() -> dict:
-    """Load the model configuration from HuggingFace"""
-    repo_id: str = "Qwen/Qwen3-4B-Instruct-2507"
-    config_path: str = hf_hub_download(repo_id, "config.json")
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        config: dict = json.load(f)
-
-    return config
-
-
 class Qwen3Model(nn.Module):
     """
     Complete Qwen3 4B Language Model
@@ -34,33 +23,31 @@ class Qwen3Model(nn.Module):
     4. Output Projection (LM head)
     """
 
-    def __init__(
-        self,
-        vocab_size: int = 151936,
-        d_model: int = 2560,
-        num_layers: int = 36,
-        num_heads: int = 32,
-        num_kv_heads: int = 8,
-        intermediate_size: int = 9728,
-        max_position_embeddings: int = 262144,
-        rms_norm_eps: float = 1e-6,
-        rope_theta: float = 5000000.0,
-    ) -> None:
+    def __init__(self, repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> None:
         """
         Initialize Qwen3 4B model
 
+        Loads configuration from HuggingFace and initializes the model architecture.
+
         Args:
-            vocab_size: Size of vocabulary (151936 for Qwen3 4B)
-            d_model: Model dimension (2560 for Qwen3 4B)
-            num_layers: Number of transformer layers (36 for Qwen3 4B)
-            num_heads: Number of query attention heads (32 for Qwen3 4B)
-            num_kv_heads: Number of key/value heads for GQA (8 for Qwen3 4B)
-            intermediate_size: MLP hidden dimension (9728 for Qwen3 4B)
-            max_position_embeddings: Maximum sequence length (262144 for Qwen3 4B)
-            rms_norm_eps: RMSNorm epsilon (1e-6 for Qwen3 4B)
-            rope_theta: RoPE base frequency (5000000 for Qwen3 4B)
+            repo_id: HuggingFace model repository ID
         """
         super().__init__()
+
+        # Load configuration from HuggingFace
+        config_path = hf_hub_download(repo_id, "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        # Extract configuration parameters
+        vocab_size = config["vocab_size"]
+        d_model = config["hidden_size"]
+        num_layers = config["num_hidden_layers"]
+        num_heads = config["num_attention_heads"]
+        num_kv_heads = config["num_key_value_heads"]
+        intermediate_size = config["intermediate_size"]
+        rms_norm_eps = config["rms_norm_eps"]
+        rope_theta = config["rope_theta"]
 
         self.vocab_size = vocab_size
         self.d_model = d_model

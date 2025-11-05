@@ -2,14 +2,7 @@
 
 import torch
 import pytest
-from model import load_config
 from mlp import MLP
-
-
-@pytest.fixture
-def config():
-    """Load model config"""
-    return load_config()
 
 
 @pytest.fixture

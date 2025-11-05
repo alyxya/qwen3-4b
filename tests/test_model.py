@@ -2,13 +2,7 @@
 
 import pytest
 import torch
-from model import load_config, Qwen3Model
-
-
-@pytest.fixture
-def config():
-    """Load model config"""
-    return load_config()
+from model import Qwen3Model
 
 
 @pytest.fixture

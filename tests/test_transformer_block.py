@@ -3,15 +3,8 @@
 import torch
 import torch.nn as nn
 import pytest
-from model import load_config
 from rmsnorm import RMSNorm
 from transformer_block import TransformerBlock
-
-
-@pytest.fixture
-def config():
-    """Load model config"""
-    return load_config()
 
 
 @pytest.fixture
