@@ -2,6 +2,17 @@
 
 A clean PyTorch implementation of Qwen3 4B (4 billion parameters) built for learning and inference.
 
+## Installation
+
+```bash
+pip install torch huggingface_hub safetensors regex
+```
+
+Requirements:
+- Python 3.10+
+- PyTorch 2.0+
+- ~8GB RAM for weights (bfloat16)
+
 ## Quick Start
 
 ```python
@@ -93,9 +104,9 @@ conversation = conversation + resp_2
 ## Testing
 
 ```bash
-pytest -m "not slow"  # Fast unit tests (~18s)
-pytest -m "slow"      # Integration tests with full model (~3min)
-pytest                # All tests
+pytest -m "not slow"  # Fast unit tests (55 tests, ~5s)
+pytest -m "slow"      # Integration tests with full model (3 tests, ~3min)
+pytest                # All 58 tests
 ```
 
 ## Architecture
@@ -129,7 +140,7 @@ AGENTS.md               # Guide for AI agents
 
 - **Memory efficient**: Meta device initialization, single allocation
 - **KV caching**: Efficient autoregressive generation
-- **Type safe**: Full type annotations
-- **Well tested**: 54 tests covering all components
+- **Type safe**: Full type annotations (Python 3.10+ style)
+- **Well tested**: 58 tests covering all components
 
 See [AGENTS.md](AGENTS.md) for implementation details and development guide.

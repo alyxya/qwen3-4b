@@ -8,7 +8,7 @@ This document provides guidance for AI coding agents (like Claude, Cursor, etc.)
 qwen3-4b/
 ├── src/                      # Source code
 │   ├── __init__.py
-│   ├── model.py             # Main Qwen3Model class
+│   ├── model.py             # Main Qwen3Model class + generate()
 │   ├── transformer_block.py # Transformer layer implementation
 │   ├── attention.py         # Multi-head attention with GQA
 │   ├── mlp.py              # Feed-forward network
@@ -17,9 +17,24 @@ qwen3-4b/
 │   ├── rope.py             # Rotary position embeddings
 │   ├── tokenizer.py        # BPE tokenizer
 │   └── load_weights.py     # Weight loading utilities
-├── tests/                   # Test suite
+├── tests/                   # Test suite (58 tests)
+├── main.py                 # Demo script
+├── AGENTS.md               # This file (AI agent guide)
+├── CLAUDE.md -> AGENTS.md  # Symlink to this file
 └── README.md               # User documentation
 ```
+
+## Dependencies
+
+Core dependencies:
+- **torch**: PyTorch for model implementation
+- **huggingface_hub**: Download pretrained weights and tokenizer
+- **safetensors**: Load model weights efficiently
+- **regex**: Enhanced regex for tokenizer pre-processing
+
+Development dependencies:
+- **pytest**: Testing framework (with `slow` marker for integration tests)
+- **ruff**: Code formatting and linting
 
 ## Architecture Overview
 
@@ -44,10 +59,33 @@ This is a from-scratch implementation of **Qwen3 4B** (4 billion parameters) wit
 - Parameter names are mapped from HuggingFace format to our model structure
 - `lm_head` uses weight tying (shares weights with `embed_tokens`)
 
+### Generation API
+The `generate()` method in `model.py` has important semantics:
+- **Input**: `input_ids` contains the FULL sequence (prompt + any previous generations)
+- **Output**: Returns ONLY newly generated tokens (not including input)
+- **Cache management**: Automatically handles continuation and truncation based on cache vs input length
+- **Multi-turn**: Pass the full conversation history each time, cache avoids recomputation
+
+Example flow:
+```python
+# Initial generation
+conversation = [1, 2, 3]  # prompt
+new_tokens, cache_k, cache_v = model.generate(conversation, max_new_tokens=5)
+conversation = conversation + new_tokens  # [1, 2, 3, 4, 5, 6, 7, 8]
+
+# Continue - pass FULL conversation
+more_tokens, cache_k, cache_v = model.generate(
+    conversation, max_new_tokens=5, cache_k=cache_k, cache_v=cache_v
+)
+conversation = conversation + more_tokens
+```
+
 ### KV Cache
 - All layers support KV caching for efficient autoregressive generation
 - Cache format: `(batch_size, num_kv_heads, seq_len, head_dim)`
 - Position IDs are automatically derived from cache state
+- Cache handles continuation (extending) and truncation (when input changes)
+- If cache is longer than input, it's truncated to force reprocessing last token
 
 ### Grouped Query Attention (GQA)
 - 32 query heads, 8 KV heads (4:1 ratio)
@@ -69,11 +107,12 @@ pytest tests/ -m "not slow"
 pytest tests/
 ```
 
-Test coverage includes:
-- Unit tests for each component (attention, MLP, RMSNorm, RoPE, etc.)
-- Integration tests for full model forward pass
-- Cache functionality tests
+Test coverage includes (58 tests total):
+- Unit tests for each component (attention, MLP, RMSNorm, RoPE, embedding, etc.)
+- Integration tests for full model forward pass and generation
+- Cache functionality tests (creation, continuation, truncation)
 - Tokenizer roundtrip tests
+- Weight loading tests
 
 ## Development Guidelines
 
@@ -104,10 +143,18 @@ Test coverage includes:
 5. Update imports in parent modules
 
 ### Debugging Shape Mismatches
-- Check comments in code showing expected tensor shapes
+- Check comments in code showing expected tensor shapes (format: `# (batch, seq, dim)`)
 - Verify batch_size, seq_len, and dimension parameters
 - Ensure RoPE and attention mask shapes align
-- Check GQA head grouping logic
+- Check GQA head grouping logic (queries grouped into 4 per KV head)
+- Remember: all model weights and activations use bfloat16
+
+### Working with the Generate Method
+- The generate method expects `input_ids: list[int]`, not tensors
+- Returns `list[int]` of new tokens, not a tensor
+- Always returns 3 values: `(new_tokens, cache_k, cache_v)`
+- To continue generation, pass the FULL conversation history (not just new tokens)
+- Cache is automatically managed - no need to manually slice or extend it
 
 ### Optimizing Performance
 - Model uses bfloat16 for memory efficiency
@@ -117,11 +164,12 @@ Test coverage includes:
 
 ## Code Style
 
-- **Type hints**: Required for all function signatures
-- **Docstrings**: Required for classes and public methods
-- **Comments**: Inline shape comments (e.g., `# (batch, seq, dim)`)
-- **Naming**: Use descriptive names matching academic papers
-- **Testing**: Pytest with fixtures in `conftest.py`
+- **Type hints**: Required for all function signatures (Python 3.10+ union syntax: `int | None`)
+- **Docstrings**: Required for classes and public methods (Google style)
+- **Comments**: Inline shape comments for tensors (e.g., `# (batch, seq, dim)`)
+- **Naming**: Use descriptive names matching academic papers and HuggingFace conventions
+- **Testing**: Pytest with fixtures in `conftest.py`, use `@pytest.mark.slow` for expensive tests
+- **Formatting**: Code is formatted with `ruff` (run via `ruff format .`)
 
 ## Resources
 
