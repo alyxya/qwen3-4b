@@ -1,0 +1,38 @@
+{
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.pytest_cache",
+    ".git",
+    "tests"
+  ],
+  "pythonVersion": "3.10",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": true,
+  "reportUnusedVariable": true,
+  "reportDuplicateImport": true,
+  "reportUntypedFunctionDecorator": false,
+  "reportPrivateUsage": false,
+  "reportConstantRedefinition": true,
+  "reportIncompatibleMethodOverride": true,
+  "reportIncompatibleVariableOverride": true,
+  "reportInconsistentConstructor": true,
+  "reportMissingParameterType": false,
+  "reportMissingTypeArgument": false,
+  "reportUnnecessaryIsInstance": true,
+  "reportUnnecessaryCast": true,
+  "reportUnnecessaryComparison": true,
+  "reportUnusedClass": true,
+  "reportUnusedFunction": true,
+  "reportOptionalMemberAccess": true,
+  "reportOptionalSubscript": true,
+  "reportOptionalCall": true,
+  "stubPath": "",
+  "venvPath": ".",
+  "venv": ""
+}
