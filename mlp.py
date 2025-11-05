@@ -59,17 +59,17 @@ class MLP(nn.Module):
             Output tensor, shape (batch_size, seq_len, d_model)
         """
         # Gate pathway: x → gate_proj → SiLU
-        gate = self.gate_proj(x)  # (batch, seq_len, intermediate_size)
-        gate = self.activation(gate)
+        gate = self.gate_proj(x)  # (batch, seq, intermediate_size) = (batch, seq, 9728)
+        gate = self.activation(gate)  # (batch, seq, 9728)
 
         # Up pathway: x → up_proj (no activation)
-        up = self.up_proj(x)  # (batch, seq_len, intermediate_size)
+        up = self.up_proj(x)  # (batch, seq, 9728)
 
         # Combine: element-wise multiply gate and up
-        hidden = gate * up  # (batch, seq_len, intermediate_size)
+        hidden = gate * up  # (batch, seq, 9728)
 
         # Down pathway: hidden → down_proj
-        output = self.down_proj(hidden)  # (batch, seq_len, d_model)
+        output = self.down_proj(hidden)  # (batch, seq, dim) = (batch, seq, 2560)
 
         return output
 

@@ -48,45 +48,38 @@ class RoPE(nn.Module):
         Returns:
             Rotated tensor of same shape as input
         """
-        # x shape: (batch_size, num_heads, seq_len, head_dim)
-        batch_size, num_heads, seq_len, head_dim = x.shape
+        batch_size, num_heads, seq_len, head_dim = x.shape  # x: (batch, heads, seq, head_dim)
 
         # Ensure position_ids has correct shape: (seq_len,)
         if position_ids.dim() == 2:
             # If batched (batch_size, seq_len), take first batch
             # Assumes all batches have same positions (typical for inference)
-            position_ids = position_ids[0]
-        # Now position_ids: (seq_len,)
+            position_ids = position_ids[0]  # (seq,)
 
         # Compute the rotation angles for each position
-        # position_ids: (seq_len,)
-        # inv_freq: (head_dim // 2,)
-        # freqs: (seq_len, head_dim // 2)
-        freqs = torch.outer(position_ids, self.inv_freq)
+        freqs = torch.outer(position_ids, self.inv_freq)  # (seq, head_dim//2)
 
-        # Create the rotation matrix using cos and sin
-        # We'll apply: [cos, -sin; sin, cos] rotation to pairs of dimensions
-        cos = freqs.cos()  # (seq_len, head_dim // 2)
-        sin = freqs.sin()  # (seq_len, head_dim // 2)
+        # Create cos and sin for rotation
+        cos = freqs.cos()  # (seq, head_dim//2)
+        sin = freqs.sin()  # (seq, head_dim//2)
 
         # Reshape x to separate even and odd dimensions
-        # Split head_dim into pairs: [x0, x1, x2, x3, ...] -> [[x0, x1], [x2, x3], ...]
-        x_reshaped = x.reshape(batch_size, num_heads, seq_len, head_dim // 2, 2)
+        x_reshaped = x.reshape(batch_size, num_heads, seq_len, head_dim // 2, 2)  # (batch, heads, seq, head_dim//2, 2)
 
         # Extract even and odd elements
-        x_even = x_reshaped[..., 0]  # (batch_size, num_heads, seq_len, head_dim // 2)
-        x_odd = x_reshaped[..., 1]   # (batch_size, num_heads, seq_len, head_dim // 2)
+        x_even = x_reshaped[..., 0]  # (batch, heads, seq, head_dim//2)
+        x_odd = x_reshaped[..., 1]   # (batch, heads, seq, head_dim//2)
+
+        # Broadcast cos/sin to match x shape
+        cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim//2)
+        sin = sin.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim//2)
 
         # Apply rotation: [cos*x_even - sin*x_odd, sin*x_even + cos*x_odd]
-        # Broadcast cos/sin from (seq_len, head_dim//2) to match x shape
-        cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, head_dim // 2)
-        sin = sin.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, head_dim // 2)
-
-        x_rotated_even = cos * x_even - sin * x_odd
-        x_rotated_odd = sin * x_even + cos * x_odd
+        x_rotated_even = cos * x_even - sin * x_odd  # (batch, heads, seq, head_dim//2)
+        x_rotated_odd = sin * x_even + cos * x_odd   # (batch, heads, seq, head_dim//2)
 
         # Recombine into original shape
-        x_rotated = torch.stack([x_rotated_even, x_rotated_odd], dim=-1)
-        x_rotated = x_rotated.reshape(batch_size, num_heads, seq_len, head_dim)
+        x_rotated = torch.stack([x_rotated_even, x_rotated_odd], dim=-1)  # (batch, heads, seq, head_dim//2, 2)
+        x_rotated = x_rotated.reshape(batch_size, num_heads, seq_len, head_dim)  # (batch, heads, seq, head_dim)
 
         return x_rotated

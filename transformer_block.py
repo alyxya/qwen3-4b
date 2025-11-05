@@ -91,21 +91,21 @@ class TransformerBlock(nn.Module):
             - new_cache_v: Updated value cache
         """
         # Self-attention with residual connection
-        residual = x
-        x = self.input_layernorm(x)
+        residual = x  # (batch, seq, dim)
+        x = self.input_layernorm(x)  # (batch, seq, dim)
 
         attn_output, new_cache_k, new_cache_v = self.self_attn(
             x,
             cache_k=cache_k,
             cache_v=cache_v,
-        )
+        )  # attn_output: (batch, seq, dim)
 
-        x = residual + attn_output
+        x = residual + attn_output  # (batch, seq, dim)
 
         # MLP with residual connection
-        residual = x
-        x = self.post_attention_layernorm(x)
-        mlp_output = self.mlp(x)
-        x = residual + mlp_output
+        residual = x  # (batch, seq, dim)
+        x = self.post_attention_layernorm(x)  # (batch, seq, dim)
+        mlp_output = self.mlp(x)  # (batch, seq, dim)
+        x = residual + mlp_output  # (batch, seq, dim)
 
         return x, new_cache_k, new_cache_v

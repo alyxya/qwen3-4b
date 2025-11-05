@@ -85,67 +85,67 @@ class Attention(nn.Module):
         Returns:
             Tuple of (output, new_cache_k, new_cache_v)
         """
-        batch_size, seq_len, _ = x.shape
+        batch_size, seq_len, _ = x.shape  # x: (batch, seq, dim)
 
         # Derive position_ids automatically from cache
         if cache_k is not None:
             start_pos = cache_k.shape[2]
-            position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)
+            position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)  # (seq,)
         else:
-            position_ids = torch.arange(seq_len, device=x.device)
+            position_ids = torch.arange(seq_len, device=x.device)  # (seq,)
 
         # Project to Q, K, V
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
+        q = self.q_proj(x)  # (batch, seq, num_heads * head_dim) = (batch, seq, 4096)
+        k = self.k_proj(x)  # (batch, seq, num_kv_heads * head_dim) = (batch, seq, 1024)
+        v = self.v_proj(x)  # (batch, seq, num_kv_heads * head_dim) = (batch, seq, 1024)
 
         # Reshape to separate heads
-        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        k = k.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
-        v = v.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
+        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)      # (batch, seq, 32, 128)
+        k = k.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)   # (batch, seq, 8, 128)
+        v = v.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)   # (batch, seq, 8, 128)
 
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+        q = q.transpose(1, 2)  # (batch, 32, seq, 128)
+        k = k.transpose(1, 2)  # (batch, 8, seq, 128)
+        v = v.transpose(1, 2)  # (batch, 8, seq, 128)
 
         # Apply per-head RMSNorm and RoPE
-        q = self.q_norm(q)
-        k = self.k_norm(k)
-        q = self.rope(q, position_ids)
-        k = self.rope(k, position_ids)
+        q = self.q_norm(q)  # (batch, 32, seq, 128)
+        k = self.k_norm(k)  # (batch, 8, seq, 128)
+        q = self.rope(q, position_ids)  # (batch, 32, seq, 128)
+        k = self.rope(k, position_ids)  # (batch, 8, seq, 128)
 
         # Concatenate with KV cache if provided
         if cache_k is not None and cache_v is not None:
-            k = torch.cat([cache_k, k], dim=2)
-            v = torch.cat([cache_v, v], dim=2)
+            k = torch.cat([cache_k, k], dim=2)  # (batch, 8, seq_total, 128)
+            v = torch.cat([cache_v, v], dim=2)  # (batch, 8, seq_total, 128)
 
-        new_cache_k = k
-        new_cache_v = v
+        new_cache_k = k  # (batch, 8, seq_total, 128)
+        new_cache_v = v  # (batch, 8, seq_total, 128)
 
         # Reshape Q for Grouped Query Attention
         # Group Q heads per KV head instead of expanding K,V to match Q heads
-        q = q.view(batch_size, self.num_kv_heads, self.num_queries_per_kv, seq_len, self.head_dim)
+        q = q.view(batch_size, self.num_kv_heads, self.num_queries_per_kv, seq_len, self.head_dim)  # (batch, 8, 4, seq, 128)
 
         # Compute attention scores
         kv_seq_len = k.size(2)
-        scores = torch.einsum("bghsd,bgkd->bghsk", q, k)
-        scores = scores / (self.head_dim ** 0.5)
+        scores = torch.einsum("bghsd,bgkd->bghsk", q, k)  # (batch, 8, 4, seq, seq_total)
+        scores = scores / (self.head_dim ** 0.5)  # (batch, 8, 4, seq, seq_total)
 
         # Apply causal mask for prefill (seq_len > 1)
         if seq_len > 1:
-            mask = torch.full((seq_len, kv_seq_len), float("-inf"), device=scores.device)
-            mask = torch.triu(mask, diagonal=kv_seq_len - seq_len + 1)
-            scores = scores + mask
+            mask = torch.full((seq_len, kv_seq_len), float("-inf"), device=scores.device)  # (seq, seq_total)
+            mask = torch.triu(mask, diagonal=kv_seq_len - seq_len + 1)  # (seq, seq_total)
+            scores = scores + mask  # (batch, 8, 4, seq, seq_total)
 
-        attn_weights = torch.softmax(scores, dim=-1)
+        attn_weights = torch.softmax(scores, dim=-1)  # (batch, 8, 4, seq, seq_total)
 
         # Apply attention to values
-        output = torch.einsum("bghsk,bgkd->bghsd", attn_weights, v)
+        output = torch.einsum("bghsk,bgkd->bghsd", attn_weights, v)  # (batch, 8, 4, seq, 128)
 
         # Reshape and project output
-        output = output.reshape(batch_size, self.num_heads, seq_len, self.head_dim)
-        output = output.transpose(1, 2)
-        output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
-        output = self.o_proj(output)
+        output = output.reshape(batch_size, self.num_heads, seq_len, self.head_dim)  # (batch, 32, seq, 128)
+        output = output.transpose(1, 2)  # (batch, seq, 32, 128)
+        output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)  # (batch, seq, 4096)
+        output = self.o_proj(output)  # (batch, seq, dim) = (batch, seq, 2560)
 
         return output, new_cache_k, new_cache_v

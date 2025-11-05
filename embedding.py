@@ -39,4 +39,4 @@ class Embedding(nn.Module):
         Returns:
             Embeddings tensor of shape (batch_size, seq_len, d_model) or (seq_len, d_model)
         """
-        return self.embedding(token_ids)
+        return self.embedding(token_ids)  # (batch, seq, dim) = (batch, seq, 2560)

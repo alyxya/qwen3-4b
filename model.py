@@ -90,7 +90,7 @@ class Qwen3Model(nn.Module):
         cache_k: list[torch.Tensor] | None = None,
         cache_v: list[torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
-        hidden_states = self.embed_tokens(input_ids)
+        hidden_states = self.embed_tokens(input_ids)  # (batch, seq, dim)
 
         if cache_k is None:
             cache_k = [None] * self.num_layers
@@ -105,11 +105,11 @@ class Qwen3Model(nn.Module):
                 hidden_states,
                 cache_k=cache_k[layer_idx],
                 cache_v=cache_v[layer_idx],
-            )
+            )  # hidden_states: (batch, seq, dim)
             new_cache_k.append(new_k)
             new_cache_v.append(new_v)
 
-        hidden_states = self.norm(hidden_states)
-        logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)
+        hidden_states = self.norm(hidden_states)  # (batch, seq, dim)
+        logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)  # (batch, seq, vocab)
 
         return logits, new_cache_k, new_cache_v
