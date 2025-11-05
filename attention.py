@@ -133,7 +133,7 @@ class Attention(nn.Module):
 
         # Apply causal mask for prefill (seq_len > 1)
         if seq_len > 1:
-            mask = torch.full((seq_len, kv_seq_len), float("-inf"), device=scores.device)  # (seq, seq_total)
+            mask = torch.full((seq_len, kv_seq_len), float("-inf"), device=scores.device, dtype=scores.dtype)  # (seq, seq_total)
             mask = torch.triu(mask, diagonal=kv_seq_len - seq_len + 1)  # (seq, seq_total)
             scores = scores + mask  # (batch, 8, 4, seq, seq_total)
 
