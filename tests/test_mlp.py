@@ -18,9 +18,9 @@ def test_mlp_creation(mlp_layer, config):
     """Test that MLP layer is created with correct dimensions"""
     assert mlp_layer.d_model == config["hidden_size"]
     assert mlp_layer.intermediate_size == config["intermediate_size"]
-    assert mlp_layer.w_gate.shape == (config["intermediate_size"], config["hidden_size"])
-    assert mlp_layer.w_up.shape == (config["intermediate_size"], config["hidden_size"])
-    assert mlp_layer.w_down.shape == (config["hidden_size"], config["intermediate_size"])
+    assert mlp_layer.gate_proj.weight.shape == (config["intermediate_size"], config["hidden_size"])
+    assert mlp_layer.up_proj.weight.shape == (config["intermediate_size"], config["hidden_size"])
+    assert mlp_layer.down_proj.weight.shape == (config["hidden_size"], config["intermediate_size"])
 
 
 def test_mlp_forward(mlp_layer, config):
@@ -45,11 +45,11 @@ def test_mlp_intermediate_shapes(mlp_layer, config):
     x = torch.randn(batch_size, seq_len, d_model)
 
     # Gate pathway
-    gate = torch.einsum("bsd,id->bsi", x, mlp_layer.w_gate)
+    gate = mlp_layer.gate_proj(x)
     assert gate.shape == (batch_size, seq_len, intermediate_size)
 
     # Up pathway
-    up = torch.einsum("bsd,id->bsi", x, mlp_layer.w_up)
+    up = mlp_layer.up_proj(x)
     assert up.shape == (batch_size, seq_len, intermediate_size)
 
     # Hidden (after gating)
@@ -57,7 +57,7 @@ def test_mlp_intermediate_shapes(mlp_layer, config):
     assert hidden.shape == (batch_size, seq_len, intermediate_size)
 
     # Output
-    output = torch.einsum("bsi,di->bsd", hidden, mlp_layer.w_down)
+    output = mlp_layer.down_proj(hidden)
     assert output.shape == (batch_size, seq_len, d_model)
 
 

@@ -83,8 +83,8 @@ def test_attention_causal_mask(attention_layer, config):
     position_ids = torch.arange(seq_len, device=x.device)
 
     # Manually compute attention to inspect weights
-    q = torch.einsum("bsd,hd->bsh", x, attention_layer.w_q)
-    k = torch.einsum("bsd,kd->bsk", x, attention_layer.w_k)
+    q = attention_layer.q_proj(x)
+    k = attention_layer.k_proj(x)
 
     q = q.view(batch_size, seq_len, attention_layer.num_heads, attention_layer.head_dim)
     k = k.view(batch_size, seq_len, attention_layer.num_kv_heads, attention_layer.head_dim)
