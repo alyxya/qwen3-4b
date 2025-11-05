@@ -13,7 +13,7 @@ class RMSNorm(nn.Module):
     RMSNorm skips mean-centering and scales inputs by their RMS value.
     """
 
-    def __init__(self, d_model: int, eps: float = 1e-6) -> None:
+    def __init__(self, d_model: int, eps: float) -> None:
         """
         Initialize RMSNorm.
 

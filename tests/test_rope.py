@@ -10,7 +10,8 @@ def rope(config):
     """Create RoPE module"""
     return RoPE(
         head_dim=config["head_dim"],
-        theta=config["rope_theta"]
+        max_seq_len=config["max_position_embeddings"],
+        theta=config["rope_theta"],
     )
 
 

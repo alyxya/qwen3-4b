@@ -26,8 +26,9 @@ class Attention(nn.Module):
         num_heads: int,
         num_kv_heads: int,
         head_dim: int,
-        rope_theta: float = 5000000.0,
-        rms_norm_eps: float = 1e-6,
+        max_position_embeddings: int,
+        rope_theta: float,
+        rms_norm_eps: float,
     ) -> None:
         """
         Initialize attention layer
@@ -37,6 +38,7 @@ class Attention(nn.Module):
             num_heads: Number of query heads (32 for Qwen3 4B)
             num_kv_heads: Number of key/value heads (8 for Qwen3 4B)
             head_dim: Dimension per head (128 for Qwen3 4B)
+            max_position_embeddings: Maximum sequence length (262144 for Qwen3 4B)
             rope_theta: RoPE base frequency (5000000 for Qwen3 4B)
             rms_norm_eps: RMSNorm epsilon applied to projected Q and K heads
         """
@@ -63,7 +65,7 @@ class Attention(nn.Module):
         self.w_o = nn.Parameter(torch.randn(d_model, num_heads * head_dim))  # (2560, 4096)
 
         # RoPE for positional encoding
-        self.rope = RoPE(head_dim=head_dim, theta=rope_theta)
+        self.rope = RoPE(head_dim=head_dim, max_seq_len=max_position_embeddings, theta=rope_theta)
 
     def forward(
         self,

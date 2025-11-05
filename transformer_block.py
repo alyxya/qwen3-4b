@@ -31,8 +31,9 @@ class TransformerBlock(nn.Module):
         num_kv_heads: int,
         head_dim: int,
         intermediate_size: int,
-        rope_theta: float = 5000000.0,
-        rms_norm_eps: float = 1e-6,
+        max_position_embeddings: int,
+        rope_theta: float,
+        rms_norm_eps: float,
     ) -> None:
         """
         Initialize transformer block
@@ -43,6 +44,7 @@ class TransformerBlock(nn.Module):
             num_kv_heads: Number of key/value heads (8 for Qwen3 4B)
             head_dim: Dimension per head (128 for Qwen3 4B)
             intermediate_size: MLP hidden dimension (9728 for Qwen3 4B)
+            max_position_embeddings: Maximum sequence length (262144 for Qwen3 4B)
             rope_theta: RoPE base frequency (5000000 for Qwen3 4B)
             rms_norm_eps: RMSNorm epsilon (1e-6 for Qwen3 4B)
         """
@@ -57,6 +59,7 @@ class TransformerBlock(nn.Module):
             num_heads=num_heads,
             num_kv_heads=num_kv_heads,
             head_dim=head_dim,
+            max_position_embeddings=max_position_embeddings,
             rope_theta=rope_theta,
             rms_norm_eps=rms_norm_eps,
         )

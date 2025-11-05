@@ -17,7 +17,7 @@ class RoPE(nn.Module):
     Applies position-dependent rotations to query and key vectors in attention.
     """
 
-    def __init__(self, head_dim: int, max_seq_len: int = 262144, theta: float = 5000000.0) -> None:
+    def __init__(self, head_dim: int, max_seq_len: int, theta: float) -> None:
         """
         Initialize RoPE
 

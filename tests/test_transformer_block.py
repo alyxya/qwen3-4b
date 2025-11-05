@@ -22,6 +22,7 @@ def transformer_block(config):
         num_kv_heads=config["num_key_value_heads"],
         head_dim=config["head_dim"],
         intermediate_size=config["intermediate_size"],
+        max_position_embeddings=config["max_position_embeddings"],
         rope_theta=config["rope_theta"],
         rms_norm_eps=config["rms_norm_eps"],
     )

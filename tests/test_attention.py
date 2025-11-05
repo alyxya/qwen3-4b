@@ -13,7 +13,9 @@ def attention_layer(config):
         num_heads=config["num_attention_heads"],
         num_kv_heads=config["num_key_value_heads"],
         head_dim=config["head_dim"],
-        rope_theta=config["rope_theta"]
+        max_position_embeddings=config["max_position_embeddings"],
+        rope_theta=config["rope_theta"],
+        rms_norm_eps=config["rms_norm_eps"],
     )
 
 
