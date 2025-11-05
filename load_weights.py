@@ -59,25 +59,3 @@ def load_weights(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> dict[str, torc
                 print(f"  {key}: {all_weights[key].shape}")
 
     return all_weights
-
-
-if __name__ == "__main__":
-    print("Loading Qwen3 4B weights from HuggingFace...")
-    print("=" * 50)
-
-    weights = load_weights()
-
-    print("\n" + "=" * 50)
-    print(f"Total parameters loaded: {len(weights)}")
-    print("\nParameter names:")
-    for name in sorted(weights.keys()):
-        print(f"  {name}: {weights[name].shape}")
-
-    # Show embedding weights specifically
-    if "model.embed_tokens.weight" in weights:
-        embed_weight = weights["model.embed_tokens.weight"]
-        print("\n" + "=" * 50)
-        print("Embedding layer:")
-        print(f"  Shape: {embed_weight.shape}")
-        print(f"  Expected: (vocab_size=151936, d_model=2560)")
-        print(f"  First row (first 10 values): {embed_weight[0, :10]}")

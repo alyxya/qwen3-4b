@@ -155,27 +155,3 @@ class Tokenizer:
 
         # Step 4: Decode UTF-8 bytes to string
         return byte_array.decode("utf-8", errors="replace")
-
-
-if __name__ == "__main__":
-    # Test code
-    tokenizer = Tokenizer()
-    print("Tokenizer created!")
-    print(f"Vocab size: {len(tokenizer.vocab)}")
-    print(f"Merges: {len(tokenizer.merges)}")
-
-    # Test encode and decode
-    test_texts = [
-        "Hello, world!",
-        "The quick brown fox jumps over the lazy dog.",
-        "你好世界",  # Chinese
-        "Hello 👋 World 🌍",  # Emoji
-    ]
-
-    for test_text in test_texts:
-        print(f"\nOriginal: {repr(test_text)}")
-        token_ids = tokenizer.encode(test_text)
-        print(f"Encoded: {token_ids} ({len(token_ids)} tokens)")
-        decoded_text = tokenizer.decode(token_ids)
-        print(f"Decoded: {repr(decoded_text)}")
-        print(f"Match: {'✓' if test_text == decoded_text else '✗'}")

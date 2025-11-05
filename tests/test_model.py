@@ -1,13 +1,20 @@
-"""Tests for model configuration"""
+"""Tests for model configuration and Qwen3Model"""
 
 import pytest
-from model import load_config
+import torch
+from model import load_config, Qwen3Model
 
 
 @pytest.fixture
 def config():
     """Load model config"""
     return load_config()
+
+
+@pytest.fixture
+def model():
+    """Create model instance"""
+    return Qwen3Model.from_pretrained()
 
 
 def test_config_loaded(config):
@@ -57,3 +64,90 @@ def test_config_head_dim_calculation(config):
     assert config["head_dim"] == 128
     # Total query dimension: num_heads * head_dim
     assert config["num_attention_heads"] * config["head_dim"] == 4096
+
+
+@pytest.mark.slow
+def test_model_initialization(model):
+    """Test that model initializes successfully"""
+    assert model is not None
+    assert isinstance(model, Qwen3Model)
+    assert model.vocab_size == 151936
+    assert model.d_model == 2560
+    assert model.num_layers == 36
+    assert model.num_heads == 32
+    assert model.num_kv_heads == 8
+
+
+@pytest.mark.slow
+def test_model_parameter_count(model):
+    """Test that model has correct number of parameters"""
+    total_params = sum(p.numel() for p in model.parameters())
+    # Should be approximately 4B parameters
+    assert 4.0e9 < total_params < 4.1e9
+    assert total_params == 4057526400
+
+
+@pytest.mark.slow
+def test_model_has_layers(model):
+    """Test that model has correct number of layers"""
+    assert len(model.layers) == 36
+    assert model.embed_tokens is not None
+    assert model.norm is not None
+    assert model.lm_head is not None
+
+
+@pytest.mark.slow
+def test_model_forward_pass(model, config):
+    """Test that model forward pass works correctly"""
+    batch_size = 2
+    seq_len = 10
+    dummy_input = torch.randint(0, config["vocab_size"], (batch_size, seq_len))
+
+    with torch.no_grad():
+        logits, cache_k, cache_v = model(dummy_input)
+
+    # Check output shapes
+    assert logits.shape == (batch_size, seq_len, config["vocab_size"])
+    assert len(cache_k) == 36
+    assert len(cache_v) == 36
+
+    # Check cache shapes
+    # cache shape: (batch_size, num_kv_heads, seq_len, head_dim)
+    assert cache_k[0].shape == (batch_size, 8, seq_len, 80)
+    assert cache_v[0].shape == (batch_size, 8, seq_len, 80)
+
+
+@pytest.mark.slow
+def test_model_forward_with_cache(model, config):
+    """Test that model forward pass works with KV cache"""
+    batch_size = 1
+    seq_len = 5
+
+    # First forward pass
+    input_ids = torch.randint(0, config["vocab_size"], (batch_size, seq_len))
+    with torch.no_grad():
+        logits1, cache_k, cache_v = model(input_ids)
+
+    # Second forward pass with cache (single token)
+    next_token = torch.randint(0, config["vocab_size"], (batch_size, 1))
+    with torch.no_grad():
+        logits2, cache_k2, cache_v2 = model(next_token, cache_k=cache_k, cache_v=cache_v)
+
+    # Check that cache grew
+    assert cache_k2[0].shape[2] == seq_len + 1  # seq_len dimension should grow
+    assert cache_v2[0].shape[2] == seq_len + 1
+    assert logits2.shape == (batch_size, 1, config["vocab_size"])
+
+
+@pytest.mark.slow
+def test_model_return_hidden_states(model, config):
+    """Test that model can return hidden states instead of logits"""
+    batch_size = 2
+    seq_len = 10
+    dummy_input = torch.randint(0, config["vocab_size"], (batch_size, seq_len))
+
+    with torch.no_grad():
+        hidden_states, cache_k, cache_v = model(dummy_input, return_logits=False)
+
+    # Check output shape is hidden states, not logits
+    assert hidden_states.shape == (batch_size, seq_len, config["hidden_size"])
