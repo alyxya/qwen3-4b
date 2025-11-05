@@ -58,6 +58,9 @@ class RoPE(nn.Module):
             # Assumes all batches have same positions (typical for inference)
             position_ids = position_ids[0]  # (seq,)
 
+        # Convert position_ids to match inv_freq dtype to avoid type promotion to float32
+        position_ids = position_ids.to(self.inv_freq.dtype)
+
         # Compute the rotation angles for each position
         freqs = torch.outer(position_ids, self.inv_freq)  # (seq, head_dim//2)
 
