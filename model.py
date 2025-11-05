@@ -27,8 +27,7 @@ class Qwen3Model(nn.Module):
         self.num_heads = config["num_attention_heads"]
         self.num_kv_heads = config["num_key_value_heads"]
         self.max_position_embeddings = config["max_position_embeddings"]
-        # Use explicit head_dim from config (128), not calculated from d_model
-        self.head_dim = config.get("head_dim", self.d_model // self.num_heads)
+        self.head_dim = config["head_dim"]
 
         self.embed_tokens = Embedding(self.vocab_size, self.d_model)
         self.layers = nn.ModuleList([
