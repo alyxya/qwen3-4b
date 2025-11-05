@@ -21,7 +21,6 @@ def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]
     # For now, let's just check the first file
     try:
         first_file = hf_hub_download(repo_id, "model.safetensors.index.json")
-        print(f"Found index file: {first_file}")
 
         import json
         with open(first_file, "r") as f:
@@ -44,18 +43,15 @@ def load_weights(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> dict[str, torc
         Example: {"model.embed_tokens.weight": tensor(...), ...}
     """
     weight_files = list_weight_files(repo_id)
-    print(f"Found {len(weight_files)} weight file(s): {weight_files}")
 
     all_weights: dict[str, torch.Tensor] = {}
 
     for weight_file in weight_files:
-        print(f"\nLoading {weight_file}...")
         weight_path = hf_hub_download(repo_id, weight_file)
 
         # Load tensors from safetensors file
         with safe_open(weight_path, framework="pt", device="cpu") as f:
             for key in f.keys():
                 all_weights[key] = f.get_tensor(key)
-                print(f"  {key}: {all_weights[key].shape}")
 
     return all_weights

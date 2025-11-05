@@ -49,9 +49,7 @@ class Qwen3Model(nn.Module):
             self.norm = RMSNorm(self.d_model, eps=config["rms_norm_eps"])
 
         # Load pretrained weights
-        print("Loading pretrained weights from HuggingFace...")
         self._load_pretrained_weights(repo_id)
-        print("Weights loaded successfully!")
 
     def _load_pretrained_weights(self, repo_id: str) -> None:
         """Load pretrained weights from HuggingFace and map them to model parameters"""
