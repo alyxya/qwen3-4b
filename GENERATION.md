@@ -105,9 +105,9 @@ text = tokenizer.decode(all_tokens)
 print(text)  # "The capital of France is Paris, the largest..."
 ```
 
-### Pattern 2: Multi-Turn Conversation (With Cache) - **IMPROVED!**
+### Pattern 2: Pure Continuation (With Cache)
 
-Continue generation efficiently by reusing cache. The new API is much cleaner:
+Continue generation from existing cache state without adding new input:
 
 ```python
 # First turn: Generate initial response
@@ -119,23 +119,24 @@ new_tokens_1, cache_k, cache_v = model.generate(
     max_new_tokens=5,
 )
 # new_tokens_1 = [5, 6, 7, 8, 9]
-# cache represents tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+# cache contains: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 all_tokens_1 = input_ids + new_tokens_1
 text_1 = tokenizer.decode(all_tokens_1)
 print(text_1)  # "Hello, my name is Alice"
 
-# Second turn: Continue generation with cache
-# Beautiful! Just pass new_tokens_1 back in with the cache
+# Second turn: Continue generating WITHOUT new input
+# Cache already has everything, just generate more!
 new_tokens_2, cache_k, cache_v = model.generate(
-    input_ids=new_tokens_1,  # Pass previous output directly!
+    input_ids=None,  # or [] - no new input needed!
     max_new_tokens=5,
-    cache_k=cache_k,  # Cache already has [1,2,3,4,5,6,7,8,9]
+    cache_k=cache_k,  # Cache has [1,2,3,4,5,6,7,8,9]
     cache_v=cache_v,
 )
 # new_tokens_2 = [10, 11, 12, 13, 14]  # Only new tokens
+# cache now contains: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
-# Combine results - clean concatenation, no duplicates!
+# Combine results - clean concatenation
 all_tokens_2 = input_ids + new_tokens_1 + new_tokens_2
 # all_tokens_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
@@ -143,7 +144,44 @@ text_2 = tokenizer.decode(all_tokens_2)
 print(text_2)  # "Hello, my name is Alice and I love"
 ```
 
-### Pattern 3: Iterative Generation
+### Pattern 2b: Multi-Turn Chat (Adding New Context)
+
+The power pattern - add new context (like a user message) mid-generation:
+
+```python
+# System prompt
+system = "You are a helpful assistant."
+system_ids = tokenizer.encode(system)  # [1, 2, 3, 4, 5]
+
+# Generate initial response
+response_1, cache_k, cache_v = model.generate(
+    input_ids=system_ids,
+    max_new_tokens=10,
+)
+# response_1 = [6, 7, 8, ..., 15]
+# cache = [1, 2, 3, 4, 5, 6, 7, 8, ..., 15]
+
+conversation = system_ids + response_1
+
+# User sends a message (NEW context to add)
+user_msg = "What is Python?"
+user_ids = tokenizer.encode(user_msg)  # [100, 101, 102, 103]
+
+# Add user message to cache and generate response
+response_2, cache_k, cache_v = model.generate(
+    input_ids=user_ids,  # NEW tokens to add to conversation
+    max_new_tokens=20,
+    cache_k=cache_k,
+    cache_v=cache_v,
+)
+# First processes [100, 101, 102, 103], then generates 20 tokens
+# response_2 = [104, 105, ..., 123]
+# cache = [1, 2, 3, ..., 15, 100, 101, 102, 103, 104, ..., 123]
+
+conversation = conversation + user_ids + response_2
+```
+
+### Pattern 3: Iterative Generation (Streaming)
 
 Generate one token at a time with full control:
 
@@ -163,9 +201,9 @@ for _ in range(20):
             max_new_tokens=1,
         )
     else:
-        # Subsequent iterations: just pass the previous output!
+        # Subsequent iterations: no new input, just continue!
         new_tokens, cache_k, cache_v = model.generate(
-            input_ids=new_tokens,  # Pass previous output directly
+            input_ids=None,  # No new input
             max_new_tokens=1,
             cache_k=cache_k,
             cache_v=cache_v,
@@ -182,12 +220,14 @@ final_text = tokenizer.decode(all_tokens)
 
 ## Key Insights
 
-### 1. **`input_ids` semantics change based on cache**
+### 1. **`input_ids` means "new context to add"**
 
-| Cache State | `input_ids` Meaning | Model Processes |
-|-------------|---------------------|-----------------|
-| `cache_k=None` | Prompt tokens to start from | All tokens in `input_ids` (prefill) |
-| `cache_k` provided | Tokens already in cache | Only last token from `input_ids` (decode) |
+| `input_ids` Value | Meaning | What Happens |
+|-------------------|---------|--------------|
+| `None` or `[]` | No new context | Generate directly from cache state |
+| `[tokens...]` | New context to add | Process these tokens first, add to cache, then generate |
+
+**Key insight**: Think of `input_ids` as "what NEW stuff should I process before generating", not "repeat what I already have".
 
 ### 2. **Return `generated_ids` contains ONLY new tokens**
 
@@ -202,13 +242,23 @@ After generation, cache contains KV states for input + generated tokens:
 - Cache sequence length: `len(input_ids) + len(generated_ids)`
 - Corresponds to `input_ids + generated_ids`
 
-### 4. **Efficient continuation is now trivial!**
+### 4. **Pure continuation needs no input**
 
-The output can be passed directly as input with cache:
+To just continue generating from cache state:
 ```python
-# ✅ BEAUTIFUL: Pass previous output directly
+# ✅ CLEAN: No input needed, cache has everything
 new_tokens_2, cache_k, cache_v = model.generate(
-    input_ids=new_tokens_1,  # Just pass previous output!
+    input_ids=None,  # or []
+    cache_k=cache_k,
+    cache_v=cache_v,
+)
+```
+
+To add NEW context (like user message) then generate:
+```python
+# ✅ POWERFUL: Add new context
+new_tokens_2, cache_k, cache_v = model.generate(
+    input_ids=user_message_ids,  # NEW context to add
     cache_k=cache_k,
     cache_v=cache_v,
 )

@@ -325,7 +325,7 @@ def test_model_generate_with_top_p(model, tokenizer):
 
 @pytest.mark.slow
 def test_model_generate_with_existing_cache(model, tokenizer):
-    """Test that generate() can continue from existing KV cache - shows improved ergonomics!"""
+    """Test that generate() can continue from existing KV cache"""
     prompt = "The capital of"
 
     # First generation - create cache
@@ -342,9 +342,10 @@ def test_model_generate_with_existing_cache(model, tokenizer):
     print(f"First generation: {text_1}")
 
     # Continue generation with existing cache
-    # Beautiful API: just pass the new_tokens_1 back in with the cache!
+    # Cache already has all tokens (input_ids + new_tokens_1)
+    # So we can just continue without passing input_ids!
     new_tokens_2, cache_k, cache_v = model.generate(
-        input_ids=new_tokens_1,  # Just pass the previous output directly!
+        input_ids=None,  # Cache already has everything!
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
@@ -360,3 +361,45 @@ def test_model_generate_with_existing_cache(model, tokenizer):
     # Verify continuation worked
     assert len(new_tokens_2) == 3  # Got exactly 3 new tokens
     assert text_2.startswith(text_1)
+
+
+@pytest.mark.slow
+def test_model_generate_chat_pattern(model, tokenizer):
+    """Test multi-turn chat pattern by adding new context with cache"""
+    # Initial prompt
+    system_prompt = "You are helpful."
+    system_ids = tokenizer.encode(system_prompt)
+
+    # Generate first response
+    response_1, cache_k, cache_v = model.generate(
+        input_ids=system_ids,
+        max_new_tokens=5,
+        temperature=0.7,
+        top_k=50,
+    )
+
+    conversation = system_ids + response_1
+    print(f"System + Response 1: {tokenizer.decode(conversation)}")
+
+    # User adds a message (NEW context)
+    user_msg = " How are you?"
+    user_ids = tokenizer.encode(user_msg)
+
+    # Add user message to cache and generate response
+    response_2, cache_k, cache_v = model.generate(
+        input_ids=user_ids,  # NEW tokens to add to conversation
+        max_new_tokens=5,
+        temperature=0.7,
+        top_k=50,
+        cache_k=cache_k,
+        cache_v=cache_v,
+    )
+
+    conversation = conversation + user_ids + response_2
+    print(f"Full conversation: {tokenizer.decode(conversation)}")
+
+    # Verify cache management
+    # Cache should have: system + response_1 + user_ids + response_2
+    expected_cache_len = len(system_ids) + 5 + len(user_ids) + 5
+    assert cache_k[0].shape[2] == expected_cache_len
+    assert cache_v[0].shape[2] == expected_cache_len
