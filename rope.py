@@ -35,9 +35,8 @@ class RoPE(nn.Module):
         # For each pair of dimensions, we have a different frequency
         # Shape: (head_dim // 2,)
         # Compute in float32 for accuracy, then convert to bfloat16 to match model weights
-        with torch.device("cpu"):
-            inv_freq = 1.0 / (self.theta ** (torch.arange(0, head_dim, 2) / head_dim))
-            inv_freq = inv_freq.to(torch.bfloat16)
+        inv_freq = 1.0 / (self.theta ** (torch.arange(0, head_dim, 2, device="cpu") / head_dim))
+        inv_freq = inv_freq.to(torch.bfloat16)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
