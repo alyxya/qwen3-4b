@@ -96,33 +96,6 @@ class Qwen3Model(nn.Module):
         # For now, we'll keep them separate
         self.lm_head = nn.Parameter(torch.randn(vocab_size, d_model))
 
-    @classmethod
-    def from_pretrained(cls, repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> "Qwen3Model":
-        """
-        Create model from HuggingFace config
-
-        Args:
-            repo_id: HuggingFace model repository ID
-
-        Returns:
-            Initialized Qwen3Model with architecture matching the pretrained model
-        """
-        config_path = hf_hub_download(repo_id, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        return cls(
-            vocab_size=config["vocab_size"],
-            d_model=config["hidden_size"],
-            num_layers=config["num_hidden_layers"],
-            num_heads=config["num_attention_heads"],
-            num_kv_heads=config["num_key_value_heads"],
-            intermediate_size=config["intermediate_size"],
-            max_position_embeddings=config["max_position_embeddings"],
-            rms_norm_eps=config["rms_norm_eps"],
-            rope_theta=config["rope_theta"],
-        )
-
     def forward(
         self,
         input_ids: torch.Tensor,

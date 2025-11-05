@@ -14,7 +14,7 @@ def config():
 @pytest.fixture
 def model():
     """Create model instance"""
-    return Qwen3Model.from_pretrained()
+    return Qwen3Model()
 
 
 def test_config_loaded(config):
