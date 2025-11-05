@@ -227,7 +227,7 @@ def test_generation_reproducibility(model, tokenizer):
 def test_model_dtype(model):
     """Test that model uses bfloat16 throughout"""
     # Check embedding weights
-    assert model.embed_tokens.embedding.weight.dtype == torch.bfloat16
+    assert model.embed_tokens.weight.dtype == torch.bfloat16
 
     # Check transformer layer weights
     first_layer = model.layers[0]
