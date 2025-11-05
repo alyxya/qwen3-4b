@@ -49,7 +49,7 @@ pytest -v
 
 ## Model Architecture
 
-- **Parameters**: 4.06B
+- **Parameters**: ~4.02B
 - **Layers**: 36
 - **Hidden Size**: 2560
 - **Attention Heads**: 32 query, 8 key/value (GQA)
@@ -57,3 +57,21 @@ pytest -v
 - **MLP Hidden Size**: 9728
 - **Vocabulary Size**: 151,936
 - **Max Context**: 262,144 tokens
+- **RoPE Theta**: 5,000,000
+
+## Implementation Details
+
+### Memory-Efficient Initialization
+The model uses PyTorch's meta device for efficient weight loading:
+- Parameters are initialized on meta device (no memory allocation)
+- Pretrained weights loaded directly with `assign=True` (no copying)
+- Computed buffers (like RoPE frequencies) created on CPU
+- Total memory allocation: ~1x model size instead of 2x
+
+### Type Checking
+The codebase includes comprehensive type annotations and is configured for Pyright static type checking.
+
+### Testing Strategy
+- **Fast tests** (~20s): Unit tests for individual components without model initialization
+- **Slow tests** (~2-3min): Integration tests with full model and pretrained weights
+- Module-scoped fixtures cache the model instance to avoid repeated weight loading
