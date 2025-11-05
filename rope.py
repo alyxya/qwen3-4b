@@ -34,7 +34,9 @@ class RoPE(nn.Module):
         # Precompute the rotation frequencies
         # For each pair of dimensions, we have a different frequency
         # Shape: (head_dim // 2,)
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        # Always create this buffer on CPU since it's computed, not loaded from weights
+        with torch.device("cpu"):
+            inv_freq = 1.0 / (self.theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
