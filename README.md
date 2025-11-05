@@ -53,7 +53,7 @@ pytest -v
 - **Layers**: 36
 - **Hidden Size**: 2560
 - **Attention Heads**: 32 query, 8 key/value (GQA)
-- **Head Dimension**: 80
+- **Head Dimension**: 128
 - **MLP Hidden Size**: 9728
 - **Vocabulary Size**: 151,936
 - **Max Context**: 262,144 tokens

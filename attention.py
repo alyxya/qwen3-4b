@@ -79,106 +79,73 @@ class Attention(nn.Module):
 
         Args:
             x: Input tensor, shape (batch_size, seq_len, d_model)
-               NOTE: All sequences in batch must have same length. For variable-length
-               sequences, pad to same length and use attention_mask (not yet implemented).
-            cache_k: Cached key tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
-            cache_v: Cached value tensor, shape (batch_size, num_kv_heads, past_seq_len, head_dim) or None
+            cache_k: Cached key tensor or None
+            cache_v: Cached value tensor or None
 
         Returns:
             Tuple of (output, new_cache_k, new_cache_v)
-            - output: shape (batch_size, seq_len, d_model)
-            - new_cache_k: Updated key cache, shape (batch_size, num_kv_heads, total_seq_len, head_dim)
-            - new_cache_v: Updated value cache, shape (batch_size, num_kv_heads, total_seq_len, head_dim)
-
-            Note: Cache is always returned. To use caching, pass the returned cache back in the next call.
-                  To disable caching, simply don't pass the cache back (pass None).
-
-        TODO: Add attention_mask parameter to support variable-length sequences with padding.
-              This would mask out padded positions in the attention computation.
         """
         batch_size, seq_len, _ = x.shape
 
         # Derive position_ids automatically from cache
         if cache_k is not None:
-            # Continue from where cache left off
             start_pos = cache_k.shape[2]
             position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)
         else:
-            # Start from position 0
             position_ids = torch.arange(seq_len, device=x.device)
 
-        # Project to Q, K, V using Linear layers
-        q = self.q_proj(x)  # (batch, seq_len, num_heads * head_dim)
-        k = self.k_proj(x)  # (batch, seq_len, num_kv_heads * head_dim)
-        v = self.v_proj(x)  # (batch, seq_len, num_kv_heads * head_dim)
+        # Project to Q, K, V
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
 
         # Reshape to separate heads
         q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
         k = k.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
         v = v.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
 
-        # Transpose to (batch_size, num_heads, seq_len, head_dim)
-        q = q.transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
-        k = k.transpose(1, 2)  # (batch_size, num_kv_heads, seq_len, head_dim)
-        v = v.transpose(1, 2)  # (batch_size, num_kv_heads, seq_len, head_dim)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
 
-        # Apply per-head RMSNorm prior to RoPE if provided
+        # Apply per-head RMSNorm and RoPE
         q = self.q_norm(q)
         k = self.k_norm(k)
-
-        # Apply RoPE to Q and K
         q = self.rope(q, position_ids)
         k = self.rope(k, position_ids)
 
-        # Handle KV cache for generation
+        # Concatenate with KV cache if provided
         if cache_k is not None and cache_v is not None:
-            # Concatenate new K, V with cached K, V
-            k = torch.cat([cache_k, k], dim=2)  # Concat along seq_len
+            k = torch.cat([cache_k, k], dim=2)
             v = torch.cat([cache_v, v], dim=2)
 
-        # Always return the current K, V as cache (caller decides whether to use it)
         new_cache_k = k
         new_cache_v = v
 
-        # Reshape Q to group queries per KV head for GQA (Grouped Query Attention)
-        # Instead of expanding K,V to match Q heads, we group Q heads per KV head
-        # q: (batch, num_heads, seq_len, head_dim) -> (batch, num_kv_heads, num_queries_per_kv, seq_len, head_dim)
+        # Reshape Q for Grouped Query Attention
+        # Group Q heads per KV head instead of expanding K,V to match Q heads
         q = q.view(batch_size, self.num_kv_heads, self.num_queries_per_kv, seq_len, self.head_dim)
-        # k, v stay as: (batch, num_kv_heads, kv_seq_len, head_dim)
 
-        # Compute attention scores using einsum with broadcasting
-        # q: (batch, kv_heads, queries_per_kv, seq_len, head_dim) - "bghsd"
-        # k: (batch, kv_heads, kv_seq_len, head_dim) - "bgkd"
-        # scores: (batch, kv_heads, queries_per_kv, seq_len, kv_seq_len) - "bghsk"
+        # Compute attention scores
         kv_seq_len = k.size(2)
-        scores = torch.einsum("bghsd,bgkd->bghsk", q, k)  # Broadcasting over kv_heads
+        scores = torch.einsum("bghsd,bgkd->bghsk", q, k)
         scores = scores / (self.head_dim ** 0.5)
 
-        # Apply causal mask (prevent attending to future tokens)
-        # When generating single tokens with cache (seq_len=1), we attend to all cached tokens
-        # When prefill (seq_len > 1), we need causal masking
+        # Apply causal mask for prefill (seq_len > 1)
         if seq_len > 1:
-            # Create causal mask: upper triangular matrix of -inf
-            # Shape: (seq_len, kv_seq_len)
             mask = torch.full((seq_len, kv_seq_len), float("-inf"), device=scores.device)
             mask = torch.triu(mask, diagonal=kv_seq_len - seq_len + 1)
             scores = scores + mask
 
-        # Apply softmax
         attn_weights = torch.softmax(scores, dim=-1)
 
-        # Apply attention to values using einsum with broadcasting
-        # attn_weights: (batch, kv_heads, queries_per_kv, seq_len, kv_seq_len) - "bghsk"
-        # v: (batch, kv_heads, kv_seq_len, head_dim) - "bgkd"
-        # output: (batch, kv_heads, queries_per_kv, seq_len, head_dim) - "bghsd"
+        # Apply attention to values
         output = torch.einsum("bghsk,bgkd->bghsd", attn_weights, v)
 
-        # Reshape back to (batch, num_heads, seq_len, head_dim) then transpose
+        # Reshape and project output
         output = output.reshape(batch_size, self.num_heads, seq_len, self.head_dim)
-        output = output.transpose(1, 2)  # (batch, seq_len, num_heads, head_dim)
+        output = output.transpose(1, 2)
         output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
-
-        # Final projection using Linear layer
-        output = self.o_proj(output)  # (batch, seq_len, d_model)
+        output = self.o_proj(output)
 
         return output, new_cache_k, new_cache_v

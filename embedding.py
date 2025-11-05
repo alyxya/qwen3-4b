@@ -1,5 +1,5 @@
 """
-Embedding layer for Qwen3 4B - Custom implementation
+Token embedding layer for Qwen3 4B
 """
 
 import torch
@@ -11,8 +11,6 @@ class Embedding(nn.Module):
     Token embedding layer - converts token IDs to dense vectors
 
     This is a simple lookup table: embeddings[token_id] -> vector of size d_model
-
-    Reimplemented from scratch to understand what nn.Embedding does under the hood.
     """
 
     def __init__(self, vocab_size: int, d_model: int) -> None:

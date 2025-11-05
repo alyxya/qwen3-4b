@@ -36,7 +36,8 @@ class Tokenizer:
         pattern_str: str = tokenizer_data["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"]
         self.pattern: re.Pattern = re.compile(pattern_str)
 
-        # TODO: Extract special tokens
+        # Special tokens (e.g., <|endoftext|>, <|im_start|>, <|im_end|>) available in
+        # tokenizer_data["added_tokens"] but not needed for basic inference
         self.special_tokens: dict[str, int] = {}
 
         # Build byte-to-unicode mapping (GPT-2 style byte-level BPE)
