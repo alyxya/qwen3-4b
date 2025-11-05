@@ -273,16 +273,16 @@ def test_model_generate_method(model, tokenizer):
     input_ids = tokenizer.encode(prompt)
 
     # Use the generate method
-    generated_ids, cache_k, cache_v = model.generate(
+    new_tokens, cache_k, cache_v = model.generate(
         input_ids=input_ids,
         max_new_tokens=10,
         temperature=0.8,
         top_k=50,
     )
 
-    # Verify we got more tokens
-    assert len(generated_ids) == len(input_ids) + 10
-    assert generated_ids[:len(input_ids)] == input_ids
+    # Verify we got only new tokens
+    assert len(new_tokens) == 10
+    assert new_tokens not in input_ids  # These are new tokens
 
     # Verify cache was returned
     assert cache_k is not None
@@ -291,7 +291,8 @@ def test_model_generate_method(model, tokenizer):
     assert len(cache_v) == 36
 
     # Decode and verify it's valid text
-    generated_text = tokenizer.decode(generated_ids)
+    all_tokens = input_ids + new_tokens
+    generated_text = tokenizer.decode(all_tokens)
     assert len(generated_text) > len(prompt)
     assert generated_text.startswith(prompt)
 
@@ -306,7 +307,7 @@ def test_model_generate_with_top_p(model, tokenizer):
     input_ids = tokenizer.encode(prompt)
 
     # Use top-p sampling
-    generated_ids, cache_k, cache_v = model.generate(
+    new_tokens, cache_k, cache_v = model.generate(
         input_ids=input_ids,
         max_new_tokens=5,
         temperature=1.0,
@@ -314,8 +315,9 @@ def test_model_generate_with_top_p(model, tokenizer):
     )
 
     # Verify output
-    assert len(generated_ids) == len(input_ids) + 5
-    generated_text = tokenizer.decode(generated_ids)
+    assert len(new_tokens) == 5
+    all_tokens = input_ids + new_tokens
+    generated_text = tokenizer.decode(all_tokens)
     assert generated_text.startswith(prompt)
 
     print(f"Generated with top-p: {generated_text}")
@@ -323,26 +325,26 @@ def test_model_generate_with_top_p(model, tokenizer):
 
 @pytest.mark.slow
 def test_model_generate_with_existing_cache(model, tokenizer):
-    """Test that generate() can continue from existing KV cache"""
+    """Test that generate() can continue from existing KV cache - shows improved ergonomics!"""
     prompt = "The capital of"
 
     # First generation - create cache
     input_ids = tokenizer.encode(prompt)
-    generated_ids_1, cache_k, cache_v = model.generate(
+    new_tokens_1, cache_k, cache_v = model.generate(
         input_ids=input_ids,
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
     )
 
-    text_1 = tokenizer.decode(generated_ids_1)
+    all_tokens_1 = input_ids + new_tokens_1
+    text_1 = tokenizer.decode(all_tokens_1)
     print(f"First generation: {text_1}")
 
     # Continue generation with existing cache
-    # Only pass the last token as input
-    last_token = [generated_ids_1[-1]]
-    generated_ids_2, cache_k_2, cache_v_2 = model.generate(
-        input_ids=last_token,
+    # Beautiful API: just pass the new_tokens_1 back in with the cache!
+    new_tokens_2, cache_k, cache_v = model.generate(
+        input_ids=new_tokens_1,  # Just pass the previous output directly!
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
@@ -350,11 +352,11 @@ def test_model_generate_with_existing_cache(model, tokenizer):
         cache_v=cache_v,
     )
 
-    # Combine for full text
-    full_generated_ids = generated_ids_1 + generated_ids_2[1:]  # Skip duplicate last token
-    text_2 = tokenizer.decode(full_generated_ids)
+    # Combine for full text - clean concatenation
+    all_tokens_2 = input_ids + new_tokens_1 + new_tokens_2
+    text_2 = tokenizer.decode(all_tokens_2)
     print(f"Continued generation: {text_2}")
 
     # Verify continuation worked
-    assert len(generated_ids_2) == 4  # 1 input + 3 new
+    assert len(new_tokens_2) == 3  # Got exactly 3 new tokens
     assert text_2.startswith(text_1)

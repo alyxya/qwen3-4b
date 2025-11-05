@@ -135,7 +135,7 @@ class Qwen3Model(nn.Module):
         Generate tokens autoregressively from input token IDs
 
         Args:
-            input_ids: List of input token IDs to start generation
+            input_ids: List of input token IDs to condition generation on
             max_new_tokens: Maximum number of new tokens to generate
             temperature: Sampling temperature (1.0 = no change, < 1.0 = more deterministic, > 1.0 = more random)
             top_k: If set, only sample from top k tokens (None = no filtering)
@@ -145,13 +145,15 @@ class Qwen3Model(nn.Module):
 
         Returns:
             Tuple of (generated_ids, new_cache_k, new_cache_v)
-            - generated_ids: List of all token IDs (includes input_ids)
-            - new_cache_k: Updated key cache
-            - new_cache_v: Updated value cache
+            - generated_ids: List of ONLY newly generated token IDs (does NOT include input_ids)
+            - new_cache_k: Updated key cache (includes input_ids + generated_ids)
+            - new_cache_v: Updated value cache (includes input_ids + generated_ids)
         """
 
-        # Track all generated token IDs
-        generated_ids = input_ids.copy()
+        # Track token IDs for processing
+        current_ids = input_ids.copy()
+        # Track only the newly generated tokens
+        new_tokens = []
 
         # Generate tokens one at a time
         with torch.no_grad():
@@ -159,10 +161,10 @@ class Qwen3Model(nn.Module):
                 # Prepare input tensor
                 if i == 0 and cache_k is None:
                     # Prefill phase - process entire prompt (only if no existing cache)
-                    input_tensor = torch.tensor([generated_ids])
+                    input_tensor = torch.tensor([current_ids])
                 else:
                     # Decode phase - process single token with cache
-                    input_tensor = torch.tensor([[generated_ids[-1]]])
+                    input_tensor = torch.tensor([[current_ids[-1]]])
 
                 # Forward pass
                 logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
@@ -203,7 +205,8 @@ class Qwen3Model(nn.Module):
                 # Sample from the distribution
                 next_token_id = torch.multinomial(probs, num_samples=1).item()
 
-                # Add to generated sequence
-                generated_ids.append(next_token_id)
+                # Add to tracking lists
+                current_ids.append(next_token_id)
+                new_tokens.append(next_token_id)
 
-        return generated_ids, cache_k, cache_v
+        return new_tokens, cache_k, cache_v

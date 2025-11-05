@@ -43,15 +43,16 @@ def main():
         print(f"Prompt tokens: {len(input_ids)}")
 
         # Generate using the model's generate method
-        generated_ids, _, _ = model.generate(
+        new_tokens, _, _ = model.generate(
             input_ids=input_ids,
             max_new_tokens=30,
             temperature=0.7,  # Slightly less random
             top_k=50,  # Sample from top 50 tokens
         )
 
-        # Decode the generated tokens
-        generated_text = tokenizer.decode(generated_ids)
+        # Combine prompt and generated tokens
+        all_tokens = input_ids + new_tokens
+        generated_text = tokenizer.decode(all_tokens)
 
         print(f"Generated text:")
         print(generated_text)

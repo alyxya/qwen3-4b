@@ -46,29 +46,29 @@ generated_ids, cache_k, cache_v = model.generate(
 
 ### `generated_ids: list[int]`
 
-**Semantics**: **All** token IDs for the generated sequence.
+**Semantics**: **Only newly generated** token IDs.
 
-**Content**: `input_ids + newly_generated_tokens`
+**Content**: `newly_generated_tokens` (does NOT include input_ids)
 
 **Example**:
 ```python
 input_ids = [1, 2, 3]  # "The capital"
-generated_ids, _, _ = model.generate(input_ids, max_new_tokens=2)
-# generated_ids = [1, 2, 3, 4, 5]
-#                 ^^^^^^^^  ^^^^
-#                 input     new tokens
+new_tokens, _, _ = model.generate(input_ids, max_new_tokens=2)
+# new_tokens = [4, 5]  # Only the new tokens!
+#
+# To get full sequence: input_ids + new_tokens = [1, 2, 3, 4, 5]
 ```
 
-**Important**: The returned `generated_ids` **always includes** the original `input_ids`.
+**Important**: The returned `generated_ids` contains **ONLY** newly generated tokens, NOT the input!
 
 ### `cache_k: list[torch.Tensor]`
 ### `cache_v: list[torch.Tensor]`
 
 **Semantics**: Updated KV cache representing **all processed tokens** (input + generated).
 
-**Content**: Cache for tokens corresponding to `generated_ids`
+**Content**: Cache for tokens corresponding to `input_ids + generated_ids`
 
-**Cache sequence length**: `len(input_ids) + max_new_tokens`
+**Cache sequence length**: `len(input_ids) + len(generated_ids)` = `len(input_ids) + max_new_tokens`
 
 ## Usage Patterns
 
@@ -88,60 +88,59 @@ prompt = "The capital of France is"
 input_ids = tokenizer.encode(prompt)  # [1, 2, 3, 4, 5]
 
 # Generate
-generated_ids, cache_k, cache_v = model.generate(
+new_tokens, cache_k, cache_v = model.generate(
     input_ids=input_ids,
     max_new_tokens=10,
     temperature=0.7,
     top_k=50,
 )
 
-# generated_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-#                 ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#                 input (5)      new tokens (10)
+# new_tokens = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # Only new tokens!
 
-text = tokenizer.decode(generated_ids)
+# Combine to get full sequence
+all_tokens = input_ids + new_tokens
+# all_tokens = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+text = tokenizer.decode(all_tokens)
 print(text)  # "The capital of France is Paris, the largest..."
 ```
 
-### Pattern 2: Multi-Turn Conversation (With Cache)
+### Pattern 2: Multi-Turn Conversation (With Cache) - **IMPROVED!**
 
-Continue generation efficiently by reusing cache:
+Continue generation efficiently by reusing cache. The new API is much cleaner:
 
 ```python
 # First turn: Generate initial response
 prompt = "Hello, my name is"
-input_ids = tokenizer.encode(prompt)
+input_ids = tokenizer.encode(prompt)  # [1, 2, 3, 4]
 
-generated_ids_1, cache_k, cache_v = model.generate(
+new_tokens_1, cache_k, cache_v = model.generate(
     input_ids=input_ids,
     max_new_tokens=5,
 )
-# generated_ids_1 = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+# new_tokens_1 = [5, 6, 7, 8, 9]
 # cache represents tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-text_1 = tokenizer.decode(generated_ids_1)
+all_tokens_1 = input_ids + new_tokens_1
+text_1 = tokenizer.decode(all_tokens_1)
 print(text_1)  # "Hello, my name is Alice"
 
 # Second turn: Continue generation with cache
-# IMPORTANT: Only pass the last token, cache already has the rest
-last_token_id = generated_ids_1[-1]
-generated_ids_2, cache_k, cache_v = model.generate(
-    input_ids=[last_token_id],  # Just [9]
+# Beautiful! Just pass new_tokens_1 back in with the cache
+new_tokens_2, cache_k, cache_v = model.generate(
+    input_ids=new_tokens_1,  # Pass previous output directly!
     max_new_tokens=5,
-    cache_k=cache_k,  # Cache has [1,2,3,4,5,6,7,8,9]
+    cache_k=cache_k,  # Cache already has [1,2,3,4,5,6,7,8,9]
     cache_v=cache_v,
 )
-# generated_ids_2 = [9, 10, 11, 12, 13, 14]
-#                   ^  ^^^^^^^^^^^^^^^^^^
-#                   |  new tokens (5)
-#                   last token from input_ids
+# new_tokens_2 = [10, 11, 12, 13, 14]  # Only new tokens
 
-# Combine results (skip duplicate last token)
-full_sequence = generated_ids_1 + generated_ids_2[1:]
-# full_sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+# Combine results - clean concatenation, no duplicates!
+all_tokens_2 = input_ids + new_tokens_1 + new_tokens_2
+# all_tokens_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
-text_2 = tokenizer.decode(full_sequence)
-print(text_2)  # "Hello, my name is Alice and I"
+text_2 = tokenizer.decode(all_tokens_2)
+print(text_2)  # "Hello, my name is Alice and I love"
 ```
 
 ### Pattern 3: Iterative Generation
@@ -159,25 +158,24 @@ for _ in range(20):
     # Generate one token
     if cache_k is None:
         # First iteration: process full prompt
-        gen_ids, cache_k, cache_v = model.generate(
-            input_ids=all_tokens,
+        new_tokens, cache_k, cache_v = model.generate(
+            input_ids=input_ids,
             max_new_tokens=1,
         )
     else:
-        # Subsequent iterations: only process last token
-        gen_ids, cache_k, cache_v = model.generate(
-            input_ids=[all_tokens[-1]],
+        # Subsequent iterations: just pass the previous output!
+        new_tokens, cache_k, cache_v = model.generate(
+            input_ids=new_tokens,  # Pass previous output directly
             max_new_tokens=1,
             cache_k=cache_k,
             cache_v=cache_v,
         )
 
-    # Get the newly generated token
-    new_token = gen_ids[-1]
-    all_tokens.append(new_token)
+    # Add newly generated token
+    all_tokens.extend(new_tokens)
 
     # Optional: decode and print incrementally
-    print(tokenizer.decode([new_token]), end="", flush=True)
+    print(tokenizer.decode(new_tokens), end="", flush=True)
 
 final_text = tokenizer.decode(all_tokens)
 ```
@@ -191,43 +189,37 @@ final_text = tokenizer.decode(all_tokens)
 | `cache_k=None` | Prompt tokens to start from | All tokens in `input_ids` (prefill) |
 | `cache_k` provided | Tokens already in cache | Only last token from `input_ids` (decode) |
 
-### 2. **Return `generated_ids` always includes input**
+### 2. **Return `generated_ids` contains ONLY new tokens**
 
-The returned `generated_ids` is **cumulative**, not just the new tokens:
-- Length: `len(input_ids) + max_new_tokens`
-- Content: Original input + newly sampled tokens
+The returned `generated_ids` contains **only newly generated tokens**:
+- Length: `max_new_tokens`
+- Content: Only newly sampled tokens (NOT including input)
+- To get full sequence: `input_ids + generated_ids`
 
 ### 3. **Cache represents ALL processed tokens**
 
-After generation, cache contains KV states for every token in `generated_ids`:
-- Cache sequence length: `len(generated_ids)`
-- Corresponds exactly to the tokens in `generated_ids`
+After generation, cache contains KV states for input + generated tokens:
+- Cache sequence length: `len(input_ids) + len(generated_ids)`
+- Corresponds to `input_ids + generated_ids`
 
-### 4. **Efficient continuation requires careful handling**
+### 4. **Efficient continuation is now trivial!**
 
-When continuing with cache:
+The output can be passed directly as input with cache:
 ```python
-# ✅ CORRECT: Pass only last token as input
-generated_ids_2, cache_k, cache_v = model.generate(
-    input_ids=[generated_ids_1[-1]],
-    cache_k=cache_k,
-    cache_v=cache_v,
-)
-
-# ❌ WRONG: Re-passing all tokens wastes computation
-generated_ids_2, cache_k, cache_v = model.generate(
-    input_ids=generated_ids_1,  # Cache already has these!
+# ✅ BEAUTIFUL: Pass previous output directly
+new_tokens_2, cache_k, cache_v = model.generate(
+    input_ids=new_tokens_1,  # Just pass previous output!
     cache_k=cache_k,
     cache_v=cache_v,
 )
 ```
 
-### 5. **Combining sequences must avoid duplication**
+### 5. **Combining sequences is clean**
 
-When concatenating multiple generation results:
+No need to skip duplicates - just concatenate:
 ```python
-# The last token of generated_ids_1 is the first token of generated_ids_2
-full_sequence = generated_ids_1 + generated_ids_2[1:]  # Skip duplicate
+# ✅ CLEAN: Direct concatenation
+full_sequence = input_ids + new_tokens_1 + new_tokens_2
 ```
 
 ## Implementation Details
@@ -256,51 +248,36 @@ for i in range(max_new_tokens):
 
 ## Common Mistakes
 
-### Mistake 1: Not skipping duplicate tokens when concatenating
+### Mistake 1: Expecting input_ids in the return value
 
 ```python
-# ❌ WRONG
-full = generated_ids_1 + generated_ids_2  # Duplicate last/first token!
-
-# ✅ CORRECT
-full = generated_ids_1 + generated_ids_2[1:]  # Skip duplicate
-```
-
-### Mistake 2: Re-processing cached tokens
-
-```python
-# ❌ WRONG (inefficient)
-generated_ids_2, cache_k, cache_v = model.generate(
-    input_ids=generated_ids_1,  # All already cached!
-    cache_k=cache_k,
-    cache_v=cache_v,
-)
-
-# ✅ CORRECT (efficient)
-generated_ids_2, cache_k, cache_v = model.generate(
-    input_ids=[generated_ids_1[-1]],  # Only last token
-    cache_k=cache_k,
-    cache_v=cache_v,
-)
-```
-
-### Mistake 3: Expecting only new tokens in return
-
-```python
-generated_ids, _, _ = model.generate(input_ids, max_new_tokens=5)
+new_tokens, _, _ = model.generate(input_ids, max_new_tokens=5)
 
 # ❌ WRONG assumption
-assert len(generated_ids) == 5  # Fails!
+full_sequence = new_tokens  # Missing the input!
 
 # ✅ CORRECT
-assert len(generated_ids) == len(input_ids) + 5  # Passes
+full_sequence = input_ids + new_tokens  # Combine input and output
+```
+
+### Mistake 2: Forgetting output only includes new tokens
+
+```python
+new_tokens, _, _ = model.generate(input_ids, max_new_tokens=5)
+
+# ❌ WRONG assumption
+assert len(new_tokens) == len(input_ids) + 5  # Fails!
+
+# ✅ CORRECT
+assert len(new_tokens) == 5  # Passes - only new tokens
+assert len(input_ids + new_tokens) == len(input_ids) + 5  # Full sequence
 ```
 
 ## Summary
 
-- **`input_ids`**: Tokens to process (full prompt if no cache, last token if cache provided)
+- **`input_ids`**: Tokens to process (full prompt if no cache, previous output tokens if cache provided)
 - **`cache_k/v` (input)**: Previous KV cache to continue from (None = start fresh)
-- **`generated_ids` (return)**: **All tokens** (input + generated), length = `len(input_ids) + max_new_tokens`
-- **`cache_k/v` (return)**: Updated cache for all tokens in `generated_ids`
+- **`generated_ids` (return)**: **ONLY newly generated tokens** (does NOT include input), length = `max_new_tokens`
+- **`cache_k/v` (return)**: Updated cache for `input_ids + generated_ids`
 
-The API is designed for flexibility: simple one-shot generation without cache management, or efficient multi-turn generation by manually passing cache between calls.
+The improved API makes continuation trivial: just pass the previous output as input along with the cache. No duplicate handling needed, clean concatenation!
