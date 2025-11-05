@@ -107,8 +107,8 @@ def test_model_forward_pass(model, config):
 
     # Check cache shapes
     # cache shape: (batch_size, num_kv_heads, seq_len, head_dim)
-    assert cache_k[0].shape == (batch_size, 8, seq_len, 80)
-    assert cache_v[0].shape == (batch_size, 8, seq_len, 80)
+    assert cache_k[0].shape == (batch_size, 8, seq_len, 128)
+    assert cache_v[0].shape == (batch_size, 8, seq_len, 128)
 
 
 @pytest.mark.slow
