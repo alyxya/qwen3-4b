@@ -19,6 +19,7 @@ def test_simple_generation(model, tokenizer):
 
     # Encode the prompt
     input_ids = tokenizer.encode(prompt)
+
     input_tensor = torch.tensor([input_ids])
 
     # Generate tokens
@@ -61,7 +62,6 @@ def test_generation_with_cache(model, tokenizer):
     prompt = "Hello, world!"
 
     input_ids = tokenizer.encode(prompt)
-    input_tensor = torch.tensor([input_ids])
 
     # Generation WITHOUT cache (baseline)
     max_new_tokens = 5
@@ -194,7 +194,6 @@ def test_generation_reproducibility(model, tokenizer):
     input_ids = tokenizer.encode(prompt)
 
     # First generation
-    input_tensor1 = torch.tensor([input_ids])
     generated_ids1 = input_ids.copy()
 
     with torch.no_grad():
@@ -206,7 +205,6 @@ def test_generation_reproducibility(model, tokenizer):
     # Reset seed and generate again
     torch.manual_seed(42)
 
-    input_tensor2 = torch.tensor([input_ids])
     generated_ids2 = input_ids.copy()
 
     with torch.no_grad():

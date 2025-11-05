@@ -54,7 +54,7 @@ def main():
         all_tokens = input_ids + new_tokens
         generated_text = tokenizer.decode(all_tokens)
 
-        print(f"Generated text:")
+        print("Generated text:")
         print(generated_text)
         print()
         print()
