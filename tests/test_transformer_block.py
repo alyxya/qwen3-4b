@@ -1,9 +1,11 @@
 """Tests for transformer block"""
 
 import torch
+import torch.nn as nn
 import pytest
 from model import load_config
-from transformer_block import RMSNorm, TransformerBlock
+from rmsnorm import RMSNorm
+from transformer_block import TransformerBlock
 
 
 @pytest.fixture
@@ -69,8 +71,8 @@ def test_transformer_block_creation(transformer_block, config):
     """Test that transformer block is created with correct components"""
     assert transformer_block.input_layernorm is not None
     assert transformer_block.self_attn is not None
-    assert transformer_block.q_norm is not None
-    assert transformer_block.k_norm is not None
+    assert transformer_block.self_attn.q_norm is not None
+    assert transformer_block.self_attn.k_norm is not None
     assert transformer_block.post_attention_layernorm is not None
     assert transformer_block.mlp is not None
 
@@ -124,3 +126,25 @@ def test_transformer_block_residual_connections(transformer_block, config):
     # Output should not be all zeros (residual + transformations)
     assert not torch.allclose(output, torch.zeros_like(output))
     assert output.abs().mean() > 0.0
+
+
+def test_transformer_block_applies_qk_norm(transformer_block, config):
+    """Ensure q_norm and k_norm are invoked during attention"""
+
+    class TrackingNorm(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.called = False
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            self.called = True
+            return x
+
+    transformer_block.self_attn.q_norm = TrackingNorm()
+    transformer_block.self_attn.k_norm = TrackingNorm()
+
+    x = torch.randn(1, 2, config["hidden_size"])
+    transformer_block(x)
+
+    assert transformer_block.self_attn.q_norm.called
+    assert transformer_block.self_attn.k_norm.called

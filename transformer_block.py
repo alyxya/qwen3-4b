@@ -12,47 +12,7 @@ import torch
 import torch.nn as nn
 from attention import Attention
 from mlp import MLP
-
-
-class RMSNorm(nn.Module):
-    """
-    Root Mean Square Layer Normalization
-
-    RMSNorm is simpler than LayerNorm - it only normalizes by RMS (no mean centering),
-    and only has a scale parameter (no bias).
-    """
-
-    def __init__(self, d_model: int, eps: float = 1e-6) -> None:
-        """
-        Initialize RMSNorm
-
-        Args:
-            d_model: Model dimension (2560 for Qwen3 4B)
-            eps: Small constant for numerical stability (1e-6 for Qwen3 4B)
-        """
-        super().__init__()
-        self.eps = eps
-        # Scale parameter (learnable)
-        self.weight = nn.Parameter(torch.ones(d_model))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Apply RMSNorm
-
-        Args:
-            x: Input tensor, shape (batch_size, seq_len, d_model)
-
-        Returns:
-            Normalized tensor, same shape as input
-        """
-        # Compute RMS: sqrt(mean(x^2))
-        # x: (batch, seq_len, d_model)
-        rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps)
-
-        # Normalize and scale
-        # x / rms: (batch, seq_len, d_model)
-        # self.weight: (d_model,) broadcasts to (batch, seq_len, d_model)
-        return self.weight * (x / rms)
+from rmsnorm import RMSNorm
 
 
 class TransformerBlock(nn.Module):
@@ -98,11 +58,8 @@ class TransformerBlock(nn.Module):
             num_kv_heads=num_kv_heads,
             head_dim=head_dim,
             rope_theta=rope_theta,
+            rms_norm_eps=rms_norm_eps,
         )
-
-        # Q and K norms (applied after projection, per head)
-        self.q_norm = RMSNorm(head_dim, eps=rms_norm_eps)
-        self.k_norm = RMSNorm(head_dim, eps=rms_norm_eps)
 
         # Post-attention norm
         self.post_attention_layernorm = RMSNorm(d_model, eps=rms_norm_eps)
@@ -134,9 +91,11 @@ class TransformerBlock(nn.Module):
         residual = x
         x = self.input_layernorm(x)
 
-        # TODO: Apply q_norm and k_norm inside attention
-        # For now, attention doesn't use them - we'll add this when loading weights
-        attn_output, new_cache_k, new_cache_v = self.self_attn(x, cache_k=cache_k, cache_v=cache_v)
+        attn_output, new_cache_k, new_cache_v = self.self_attn(
+            x,
+            cache_k=cache_k,
+            cache_v=cache_v,
+        )
 
         x = residual + attn_output
 

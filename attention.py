@@ -8,6 +8,7 @@ GQA uses fewer Key/Value heads than Query heads to save memory:
 
 import torch
 import torch.nn as nn
+from rmsnorm import RMSNorm
 from rope import RoPE
 
 
@@ -26,6 +27,7 @@ class Attention(nn.Module):
         num_kv_heads: int,
         head_dim: int,
         rope_theta: float = 5000000.0,
+        rms_norm_eps: float = 1e-6,
     ) -> None:
         """
         Initialize attention layer
@@ -36,6 +38,7 @@ class Attention(nn.Module):
             num_kv_heads: Number of key/value heads (8 for Qwen3 4B)
             head_dim: Dimension per head (128 for Qwen3 4B)
             rope_theta: RoPE base frequency (5000000 for Qwen3 4B)
+            rms_norm_eps: RMSNorm epsilon applied to projected Q and K heads
         """
         super().__init__()
         self.d_model: int = d_model
@@ -43,6 +46,8 @@ class Attention(nn.Module):
         self.num_kv_heads: int = num_kv_heads
         self.head_dim: int = head_dim
         self.num_queries_per_kv: int = num_heads // num_kv_heads  # 32 // 8 = 4
+        self.q_norm = RMSNorm(head_dim, eps=rms_norm_eps)
+        self.k_norm = RMSNorm(head_dim, eps=rms_norm_eps)
 
         # Projection weight matrices (no bias)
         # Query: projects from d_model to (num_heads * head_dim)
@@ -116,6 +121,10 @@ class Attention(nn.Module):
         q = q.transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
         k = k.transpose(1, 2)  # (batch_size, num_kv_heads, seq_len, head_dim)
         v = v.transpose(1, 2)  # (batch_size, num_kv_heads, seq_len, head_dim)
+
+        # Apply per-head RMSNorm prior to RoPE if provided
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         # Apply RoPE to Q and K
         q = self.rope(q, position_ids)
