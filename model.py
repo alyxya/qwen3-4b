@@ -1,6 +1,4 @@
-"""
-Complete Qwen3 4B model implementation - Built for inference
-"""
+"""Qwen3 4B model implementation"""
 
 import json
 import torch
@@ -13,75 +11,37 @@ from rmsnorm import RMSNorm
 
 
 class Qwen3Model(nn.Module):
-    """
-    Complete Qwen3 4B Language Model
-
-    Architecture:
-    1. Token Embedding
-    2. 36 Transformer Blocks (each with Attention + MLP)
-    3. Final RMSNorm
-    4. Output Projection (LM head)
-    """
+    """Qwen3 4B Language Model"""
 
     def __init__(self, repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> None:
-        """
-        Initialize Qwen3 4B model
-
-        Loads configuration from HuggingFace and initializes the model architecture.
-
-        Args:
-            repo_id: HuggingFace model repository ID
-        """
         super().__init__()
 
-        # Load configuration from HuggingFace
         config_path = hf_hub_download(repo_id, "config.json")
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
 
-        # Extract configuration parameters
-        vocab_size = config["vocab_size"]
-        d_model = config["hidden_size"]
-        num_layers = config["num_hidden_layers"]
-        num_heads = config["num_attention_heads"]
-        num_kv_heads = config["num_key_value_heads"]
-        intermediate_size = config["intermediate_size"]
-        rms_norm_eps = config["rms_norm_eps"]
-        rope_theta = config["rope_theta"]
+        self.vocab_size = config["vocab_size"]
+        self.d_model = config["hidden_size"]
+        self.num_layers = config["num_hidden_layers"]
+        self.num_heads = config["num_attention_heads"]
+        self.num_kv_heads = config["num_key_value_heads"]
+        self.head_dim = self.d_model // self.num_heads
 
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.num_kv_heads = num_kv_heads
-
-        # Calculate head dimension
-        self.head_dim = d_model // num_heads  # 2560 // 32 = 80
-
-        # 1. Token embedding layer
-        self.embed_tokens = Embedding(vocab_size=vocab_size, d_model=d_model)
-
-        # 2. Stack of transformer blocks
+        self.embed_tokens = Embedding(self.vocab_size, self.d_model)
         self.layers = nn.ModuleList([
             TransformerBlock(
-                d_model=d_model,
-                num_heads=num_heads,
-                num_kv_heads=num_kv_heads,
+                d_model=self.d_model,
+                num_heads=self.num_heads,
+                num_kv_heads=self.num_kv_heads,
                 head_dim=self.head_dim,
-                intermediate_size=intermediate_size,
-                rope_theta=rope_theta,
-                rms_norm_eps=rms_norm_eps,
+                intermediate_size=config["intermediate_size"],
+                rope_theta=config["rope_theta"],
+                rms_norm_eps=config["rms_norm_eps"],
             )
-            for _ in range(num_layers)
+            for _ in range(self.num_layers)
         ])
-
-        # 3. Final layer normalization
-        self.norm = RMSNorm(d_model, eps=rms_norm_eps)
-
-        # 4. Output projection (LM head) - maps from d_model to vocab_size
-        # Note: In many models, this shares weights with the embedding layer (weight tying)
-        # For now, we'll keep them separate
-        self.lm_head = nn.Parameter(torch.randn(vocab_size, d_model))
+        self.norm = RMSNorm(self.d_model, eps=config["rms_norm_eps"])
+        self.lm_head = nn.Parameter(torch.randn(self.vocab_size, self.d_model))
 
     def forward(
         self,
@@ -89,35 +49,16 @@ class Qwen3Model(nn.Module):
         cache_k: list[torch.Tensor] | None = None,
         cache_v: list[torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
-        """
-        Forward pass through the model
-
-        Args:
-            input_ids: Token IDs, shape (batch_size, seq_len)
-            cache_k: List of cached key tensors for each layer (length = num_layers) or None
-            cache_v: List of cached value tensors for each layer (length = num_layers) or None
-
-        Returns:
-            Tuple of (logits, new_cache_k, new_cache_v)
-            - logits: Output logits of shape (batch_size, seq_len, vocab_size)
-            - new_cache_k: List of updated key caches for each layer
-            - new_cache_v: List of updated value caches for each layer
-        """
-        # 1. Token embedding
-        # input_ids: (batch_size, seq_len) -> (batch_size, seq_len, d_model)
         hidden_states = self.embed_tokens(input_ids)
 
-        # Initialize cache lists if not provided
         if cache_k is None:
             cache_k = [None] * self.num_layers
         if cache_v is None:
             cache_v = [None] * self.num_layers
 
-        # Storage for new caches
         new_cache_k = []
         new_cache_v = []
 
-        # 2. Pass through all transformer blocks
         for layer_idx, layer in enumerate(self.layers):
             hidden_states, new_k, new_v = layer(
                 hidden_states,
@@ -127,13 +68,7 @@ class Qwen3Model(nn.Module):
             new_cache_k.append(new_k)
             new_cache_v.append(new_v)
 
-        # 3. Final normalization
         hidden_states = self.norm(hidden_states)
-
-        # 4. Project to vocabulary (LM head)
-        # hidden_states: (batch_size, seq_len, d_model) - "bsd"
-        # lm_head: (vocab_size, d_model) - "vd"
-        # logits: (batch_size, seq_len, vocab_size) - "bsv"
         logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)
 
         return logits, new_cache_k, new_cache_v
