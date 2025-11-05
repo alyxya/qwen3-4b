@@ -34,15 +34,16 @@ class MLP(nn.Module):
         self.d_model: int = d_model
         self.intermediate_size: int = intermediate_size
 
-        # Weight matrices (no bias)
+        # Projection layers to match HuggingFace naming
+        # Using nn.Linear without bias to match pretrained weights
         # gate_proj: projects from d_model to intermediate_size
-        self.w_gate = nn.Parameter(torch.randn(intermediate_size, d_model))  # (9728, 2560)
+        self.gate_proj = nn.Linear(d_model, intermediate_size, bias=False)  # (2560 -> 9728)
 
         # up_proj: projects from d_model to intermediate_size
-        self.w_up = nn.Parameter(torch.randn(intermediate_size, d_model))  # (9728, 2560)
+        self.up_proj = nn.Linear(d_model, intermediate_size, bias=False)  # (2560 -> 9728)
 
         # down_proj: projects from intermediate_size back to d_model
-        self.w_down = nn.Parameter(torch.randn(d_model, intermediate_size))  # (2560, 9728)
+        self.down_proj = nn.Linear(intermediate_size, d_model, bias=False)  # (9728 -> 2560)
 
         # SiLU activation (also called Swish)
         self.activation = nn.SiLU()
@@ -58,26 +59,17 @@ class MLP(nn.Module):
             Output tensor, shape (batch_size, seq_len, d_model)
         """
         # Gate pathway: x → gate_proj → SiLU
-        # x: (batch, seq_len, d_model) - "bsd"
-        # w_gate: (intermediate_size, d_model) - "id"
-        # gate: (batch, seq_len, intermediate_size) - "bsi"
-        gate = torch.einsum("bsd,id->bsi", x, self.w_gate)  # (batch, seq_len, 9728)
+        gate = self.gate_proj(x)  # (batch, seq_len, intermediate_size)
         gate = self.activation(gate)
 
         # Up pathway: x → up_proj (no activation)
-        # x: (batch, seq_len, d_model) - "bsd"
-        # w_up: (intermediate_size, d_model) - "id"
-        # up: (batch, seq_len, intermediate_size) - "bsi"
-        up = torch.einsum("bsd,id->bsi", x, self.w_up)  # (batch, seq_len, 9728)
+        up = self.up_proj(x)  # (batch, seq_len, intermediate_size)
 
         # Combine: element-wise multiply gate and up
-        hidden = gate * up  # (batch, seq_len, 9728)
+        hidden = gate * up  # (batch, seq_len, intermediate_size)
 
         # Down pathway: hidden → down_proj
-        # hidden: (batch, seq_len, intermediate_size) - "bsi"
-        # w_down: (d_model, intermediate_size) - "di"
-        # output: (batch, seq_len, d_model) - "bsd"
-        output = torch.einsum("bsi,di->bsd", hidden, self.w_down)  # (batch, seq_len, 2560)
+        output = self.down_proj(hidden)  # (batch, seq_len, d_model)
 
         return output
 

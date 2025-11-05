@@ -27,10 +27,9 @@ class Embedding(nn.Module):
         self.vocab_size: int = vocab_size
         self.d_model: int = d_model
 
-        # The embedding weight matrix: shape (vocab_size, d_model)
-        # This is just a big lookup table where each row is a token's embedding vector
-        # nn.Parameter tells PyTorch this is a learnable weight (even though we're only doing inference)
-        self.weight = nn.Parameter(torch.randn(vocab_size, d_model))
+        # Use nn.Embedding to match HuggingFace naming convention
+        # This creates a parameter called 'weight' which matches the expected name
+        self.embedding = nn.Embedding(vocab_size, d_model)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         """
@@ -42,6 +41,4 @@ class Embedding(nn.Module):
         Returns:
             Embeddings tensor of shape (batch_size, seq_len, d_model) or (seq_len, d_model)
         """
-        # This is all nn.Embedding does: index into the weight matrix!
-        # token_ids are used as indices to select rows from self.weight
-        return self.weight[token_ids]
+        return self.embedding(token_ids)

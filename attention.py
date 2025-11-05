@@ -51,18 +51,19 @@ class Attention(nn.Module):
         self.q_norm = RMSNorm(head_dim, eps=rms_norm_eps)
         self.k_norm = RMSNorm(head_dim, eps=rms_norm_eps)
 
-        # Projection weight matrices (no bias)
+        # Projection layers to match HuggingFace naming
+        # Using nn.Linear without bias to match pretrained weights
         # Query: projects from d_model to (num_heads * head_dim)
-        self.w_q = nn.Parameter(torch.randn(num_heads * head_dim, d_model))  # (4096, 2560)
+        self.q_proj = nn.Linear(d_model, num_heads * head_dim, bias=False)  # (2560 -> 4096)
 
         # Key: projects from d_model to (num_kv_heads * head_dim)
-        self.w_k = nn.Parameter(torch.randn(num_kv_heads * head_dim, d_model))  # (1024, 2560)
+        self.k_proj = nn.Linear(d_model, num_kv_heads * head_dim, bias=False)  # (2560 -> 1024)
 
         # Value: projects from d_model to (num_kv_heads * head_dim)
-        self.w_v = nn.Parameter(torch.randn(num_kv_heads * head_dim, d_model))  # (1024, 2560)
+        self.v_proj = nn.Linear(d_model, num_kv_heads * head_dim, bias=False)  # (2560 -> 1024)
 
         # Output: projects from (num_heads * head_dim) back to d_model
-        self.w_o = nn.Parameter(torch.randn(d_model, num_heads * head_dim))  # (2560, 4096)
+        self.o_proj = nn.Linear(num_heads * head_dim, d_model, bias=False)  # (4096 -> 2560)
 
         # RoPE for positional encoding
         self.rope = RoPE(head_dim=head_dim, max_seq_len=max_position_embeddings, theta=rope_theta)
@@ -106,13 +107,10 @@ class Attention(nn.Module):
             # Start from position 0
             position_ids = torch.arange(seq_len, device=x.device)
 
-        # Project to Q, K, V using einsum
-        # x: (batch, seq_len, d_model) - "bsd"
-        # w_q: (num_heads * head_dim, d_model) - "hd"
-        # q: (batch, seq_len, num_heads * head_dim) - "bsh"
-        q = torch.einsum("bsd,hd->bsh", x, self.w_q)  # (batch, seq_len, 4096)
-        k = torch.einsum("bsd,kd->bsk", x, self.w_k)  # (batch, seq_len, 1024)
-        v = torch.einsum("bsd,vd->bsv", x, self.w_v)  # (batch, seq_len, 1024)
+        # Project to Q, K, V using Linear layers
+        q = self.q_proj(x)  # (batch, seq_len, num_heads * head_dim)
+        k = self.k_proj(x)  # (batch, seq_len, num_kv_heads * head_dim)
+        v = self.v_proj(x)  # (batch, seq_len, num_kv_heads * head_dim)
 
         # Reshape to separate heads
         q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
@@ -180,10 +178,7 @@ class Attention(nn.Module):
         output = output.transpose(1, 2)  # (batch, seq_len, num_heads, head_dim)
         output = output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
 
-        # Final projection using einsum
-        # output: (batch, seq_len, num_heads * head_dim) - "bsh"
-        # w_o: (d_model, num_heads * head_dim) - "dh"
-        # result: (batch, seq_len, d_model) - "bsd"
-        output = torch.einsum("bsh,dh->bsd", output, self.w_o)  # (batch, seq_len, 2560)
+        # Final projection using Linear layer
+        output = self.o_proj(output)  # (batch, seq_len, d_model)
 
         return output, new_cache_k, new_cache_v
