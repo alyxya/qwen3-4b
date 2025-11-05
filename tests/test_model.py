@@ -5,12 +5,6 @@ import torch
 from src.model import Qwen3Model
 
 
-@pytest.fixture(scope="module")
-def model():
-    """Create model instance (shared across all tests in this module)"""
-    return Qwen3Model()
-
-
 def test_config_loaded(config):
     """Test that config is loaded successfully"""
     assert config is not None

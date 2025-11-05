@@ -13,3 +13,26 @@ def config():
 
     with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def model():
+    """
+    Load the full Qwen3 model (shared across entire test session)
+
+    Only loaded once when first needed by any test that uses this fixture.
+    Tests that don't use this fixture won't trigger model loading.
+    """
+    from src.model import Qwen3Model
+    return Qwen3Model()
+
+
+@pytest.fixture(scope="session")
+def tokenizer():
+    """
+    Load the tokenizer (shared across entire test session)
+
+    Only loaded once when first needed by any test that uses this fixture.
+    """
+    from src.tokenizer import Tokenizer
+    return Tokenizer()
