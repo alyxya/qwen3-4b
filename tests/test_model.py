@@ -139,15 +139,3 @@ def test_model_forward_with_cache(model, config):
     assert logits2.shape == (batch_size, 1, config["vocab_size"])
 
 
-@pytest.mark.slow
-def test_model_return_hidden_states(model, config):
-    """Test that model can return hidden states instead of logits"""
-    batch_size = 2
-    seq_len = 10
-    dummy_input = torch.randint(0, config["vocab_size"], (batch_size, seq_len))
-
-    with torch.no_grad():
-        hidden_states, cache_k, cache_v = model(dummy_input, return_logits=False)
-
-    # Check output shape is hidden states, not logits
-    assert hidden_states.shape == (batch_size, seq_len, config["hidden_size"])

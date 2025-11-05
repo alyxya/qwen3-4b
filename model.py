@@ -128,7 +128,6 @@ class Qwen3Model(nn.Module):
         input_ids: torch.Tensor,
         cache_k: list[torch.Tensor] | None = None,
         cache_v: list[torch.Tensor] | None = None,
-        return_logits: bool = True,
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
         """
         Forward pass through the model
@@ -137,12 +136,10 @@ class Qwen3Model(nn.Module):
             input_ids: Token IDs, shape (batch_size, seq_len)
             cache_k: List of cached key tensors for each layer (length = num_layers) or None
             cache_v: List of cached value tensors for each layer (length = num_layers) or None
-            return_logits: If True, return logits. If False, return hidden states before lm_head.
 
         Returns:
-            Tuple of (output, new_cache_k, new_cache_v)
-            - output: Logits of shape (batch_size, seq_len, vocab_size) if return_logits=True,
-                     else hidden states of shape (batch_size, seq_len, d_model)
+            Tuple of (logits, new_cache_k, new_cache_v)
+            - logits: Output logits of shape (batch_size, seq_len, vocab_size)
             - new_cache_k: List of updated key caches for each layer
             - new_cache_v: List of updated value caches for each layer
         """
@@ -174,11 +171,9 @@ class Qwen3Model(nn.Module):
         hidden_states = self.norm(hidden_states)
 
         # 4. Project to vocabulary (LM head)
-        if return_logits:
-            # hidden_states: (batch_size, seq_len, d_model) - "bsd"
-            # lm_head: (vocab_size, d_model) - "vd"
-            # logits: (batch_size, seq_len, vocab_size) - "bsv"
-            logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)
-            return logits, new_cache_k, new_cache_v
-        else:
-            return hidden_states, new_cache_k, new_cache_v
+        # hidden_states: (batch_size, seq_len, d_model) - "bsd"
+        # lm_head: (vocab_size, d_model) - "vd"
+        # logits: (batch_size, seq_len, vocab_size) - "bsv"
+        logits = torch.einsum("bsd,vd->bsv", hidden_states, self.lm_head)
+
+        return logits, new_cache_k, new_cache_v
