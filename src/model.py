@@ -63,9 +63,6 @@ class Qwen3Model(nn.Module):
         for name, tensor in hf_weights.items():
             if name.startswith("model."):
                 new_name = name[6:]  # Remove "model." prefix
-                # Map embed_tokens.weight to embed_tokens.embedding.weight
-                if new_name == "embed_tokens.weight":
-                    new_name = "embed_tokens.embedding.weight"
                 mapped_weights[new_name] = tensor
             else:
                 mapped_weights[name] = tensor
@@ -80,7 +77,7 @@ class Qwen3Model(nn.Module):
 
         # Handle lm_head with weight tying (shares weights with embed_tokens)
         # Qwen3 uses weight tying, so lm_head uses the same weights as embed_tokens
-        self.lm_head = self.embed_tokens.embedding.weight
+        self.lm_head = self.embed_tokens.weight
 
         if missing_keys:
             # Filter out lm_head since we handle it with weight tying

@@ -25,9 +25,9 @@ class Embedding(nn.Module):
         self.vocab_size: int = vocab_size
         self.d_model: int = d_model
 
-        # Use nn.Embedding to match HuggingFace naming convention
-        # This creates a parameter called 'weight' which matches the expected name
-        self.embedding = nn.Embedding(vocab_size, d_model)
+        # Direct parameter - no wrapping of nn.Embedding
+        # This matches HuggingFace naming convention (embed_tokens.weight)
+        self.weight = nn.Parameter(torch.empty(vocab_size, d_model))
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         """
@@ -39,4 +39,4 @@ class Embedding(nn.Module):
         Returns:
             Embeddings tensor of shape (batch_size, seq_len, d_model) or (seq_len, d_model)
         """
-        return self.embedding(token_ids)  # (batch, seq, dim) = (batch, seq, 2560)
+        return torch.nn.functional.embedding(token_ids, self.weight)  # (batch, seq, dim) = (batch, seq, 2560)

@@ -15,7 +15,7 @@ def test_embedding_creation(embedding_layer, config):
     """Test that embedding layer is created with correct dimensions"""
     assert embedding_layer.vocab_size == config["vocab_size"]
     assert embedding_layer.d_model == config["hidden_size"]
-    assert embedding_layer.embedding.weight.shape == (
+    assert embedding_layer.weight.shape == (
         config["vocab_size"],
         config["hidden_size"],
     )
@@ -43,7 +43,7 @@ def test_embedding_lookup(embedding_layer):
     output = embedding_layer(token_id)
 
     # Should match the 42nd row of the weight matrix
-    expected = embedding_layer.embedding.weight[42]
+    expected = embedding_layer.weight[42]
     assert torch.allclose(output[0], expected)
 
 
@@ -59,4 +59,4 @@ def test_embedding_batch(embedding_layer):
     assert output.shape == (batch_size, seq_len, embedding_layer.d_model)
 
     # Check first token of first batch matches
-    assert torch.allclose(output[0, 0], embedding_layer.embedding.weight[1])
+    assert torch.allclose(output[0, 0], embedding_layer.weight[1])
