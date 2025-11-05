@@ -36,7 +36,7 @@ python main.py
 
 ```python
 new_tokens, cache_k, cache_v = model.generate(
-    input_ids=tokens,      # Optional with cache
+    input_ids=tokens,      # Full sequence (prompt + previous generations)
     max_new_tokens=50,
     temperature=0.7,       # Lower = more deterministic
     top_k=50,             # Sample from top k tokens
@@ -58,29 +58,36 @@ new_tokens, _, _ = model.generate(input_ids, max_new_tokens=50)
 **Continue generating:**
 ```python
 # Generate 20 tokens
-new_1, cache_k, cache_v = model.generate(input_ids, max_new_tokens=20)
+conversation = input_ids
+new_1, cache_k, cache_v = model.generate(conversation, max_new_tokens=20)
+conversation = conversation + new_1
 
-# Continue for 20 more (no new input needed)
+# Continue for 20 more - pass full sequence
 new_2, cache_k, cache_v = model.generate(
-    input_ids=None,  # Cache has everything
+    input_ids=conversation,  # Full sequence so far
     max_new_tokens=20,
     cache_k=cache_k,
     cache_v=cache_v,
 )
+conversation = conversation + new_2
 ```
 
 **Multi-turn chat:**
 ```python
 # First response
-resp_1, cache_k, cache_v = model.generate(system_ids, max_new_tokens=30)
+conversation = system_ids
+resp_1, cache_k, cache_v = model.generate(conversation, max_new_tokens=30)
+conversation = conversation + resp_1
 
 # Add user message and generate
+conversation = conversation + user_msg_ids
 resp_2, cache_k, cache_v = model.generate(
-    input_ids=user_msg_ids,  # NEW context
+    input_ids=conversation,  # Full conversation
     max_new_tokens=50,
     cache_k=cache_k,
     cache_v=cache_v,
 )
+conversation = conversation + resp_2
 ```
 
 ## Testing

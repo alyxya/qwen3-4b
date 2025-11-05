@@ -121,7 +121,7 @@ class Qwen3Model(nn.Module):
 
     def generate(
         self,
-        input_ids: list[int] | None = None,
+        input_ids: list[int],
         max_new_tokens: int = 50,
         temperature: float = 1.0,
         top_k: int | None = None,
@@ -133,53 +133,81 @@ class Qwen3Model(nn.Module):
         Generate tokens autoregressively
 
         Args:
-            input_ids: List of input token IDs to condition generation on.
-                       Required if cache_k is None, optional if cache is provided.
-                       If cache is provided, these tokens are processed first before generation.
+            input_ids: List of ALL token IDs in the sequence so far (prompt + any previous generations).
+                       The cache length is compared with input_ids to determine what needs processing.
             max_new_tokens: Maximum number of new tokens to generate
             temperature: Sampling temperature (1.0 = no change, < 1.0 = more deterministic, > 1.0 = more random)
             top_k: If set, only sample from top k tokens (None = no filtering)
             top_p: If set, nucleus sampling - sample from smallest set of tokens with cumulative probability >= top_p
             cache_k: Optional existing KV cache (key) to continue generation from.
-                     If provided, generation continues from this cache state.
+                     If provided, cache is truncated/extended to match input_ids.
             cache_v: Optional existing KV cache (value) to continue generation from
 
         Returns:
             Tuple of (generated_ids, new_cache_k, new_cache_v)
             - generated_ids: List of ONLY newly generated token IDs (does NOT include input_ids)
-            - new_cache_k: Updated key cache (includes all processed tokens)
-            - new_cache_v: Updated value cache (includes all processed tokens)
+            - new_cache_k: Updated key cache (includes all tokens from input_ids + generated tokens)
+            - new_cache_v: Updated value cache (includes all tokens from input_ids + generated tokens)
+
+        Examples:
+            # Simple generation
+            new_tokens, cache_k, cache_v = model.generate([1, 2, 3], max_new_tokens=5)
+            all_tokens = [1, 2, 3] + new_tokens  # [1, 2, 3, 4, 5, 6, 7, 8]
+
+            # Continue generation - pass full sequence
+            conversation = [1, 2, 3, 4, 5, 6, 7, 8]
+            more_tokens, cache_k, cache_v = model.generate(
+                conversation, max_new_tokens=5, cache_k=cache_k, cache_v=cache_v
+            )
+            conversation = conversation + more_tokens  # [1, 2, 3, ..., 8, 9, 10, 11, 12, 13]
+
+            # Multi-turn chat - add new context
+            conversation = [1, 2, 3, 4, 5, 6, 7, 8]  # system + response_1
+            conversation = conversation + [9, 10]      # add user message
+            response_2, cache_k, cache_v = model.generate(
+                conversation, max_new_tokens=5, cache_k=cache_k, cache_v=cache_v
+            )
         """
         # Validate inputs
-        if cache_k is None and (input_ids is None or len(input_ids) == 0):
-            raise ValueError("input_ids must be provided when cache is None")
+        if input_ids is None or len(input_ids) == 0:
+            raise ValueError("input_ids must be provided and non-empty")
 
-        # Track only the newly generated tokens
-        new_tokens = []
+        # Get current cache length
+        cache_len = 0 if cache_k is None else cache_k[0].shape[2]
+        input_len = len(input_ids)
 
-        # Process input_ids if provided
-        if input_ids is not None and len(input_ids) > 0:
-            if cache_k is None:
-                # Prefill: process all input tokens at once
-                input_tensor = torch.tensor([input_ids])
+        # Truncate cache if it's >= input length
+        # This ensures we always reprocess at least the last token to get fresh logits
+        if cache_len >= input_len:
+            truncate_to = max(0, input_len - 1)
+            if cache_k is not None and truncate_to > 0:
+                cache_k = [k[:, :, :truncate_to, :] for k in cache_k]
+                cache_v = [v[:, :, :truncate_to, :] for v in cache_v]
+            elif truncate_to == 0:
+                # Start fresh if input is just 1 token
+                cache_k = None
+                cache_v = None
+            cache_len = truncate_to
+
+        # Process uncached suffix (always includes at least the last token)
+        uncached_tokens = input_ids[cache_len:]
+
+        with torch.no_grad():
+            # Process uncached tokens
+            if cache_k is None and len(uncached_tokens) > 0:
+                # Prefill: process all uncached tokens at once (efficient)
+                input_tensor = torch.tensor([uncached_tokens])
                 logits, cache_k, cache_v = self(input_tensor, cache_k=None, cache_v=None)
             else:
-                # Cache provided: process input_ids incrementally
-                for token_id in input_ids:
+                # Add new tokens incrementally to existing cache
+                for token_id in uncached_tokens:
                     input_tensor = torch.tensor([[token_id]])
                     logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
 
-        # Generate new tokens one at a time
-        with torch.no_grad():
-            for i in range(max_new_tokens):
-                if i == 0 and input_ids is not None and len(input_ids) > 0:
-                    # Use logits from last input token (already computed above)
-                    pass
-                else:
-                    # Generate next token based on previous generation
-                    input_tensor = torch.tensor([[new_tokens[-1]]])
-                    logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
-
+            # Now cache contains all input_ids and we have logits from the last token
+            # Generate new tokens one at a time
+            new_tokens = []
+            for _ in range(max_new_tokens):
                 # Get logits for the last token
                 next_token_logits = logits[0, -1, :]  # (vocab_size,)
 
@@ -218,5 +246,9 @@ class Qwen3Model(nn.Module):
 
                 # Add to newly generated tokens
                 new_tokens.append(next_token_id)
+
+                # Process this token to get next logits
+                input_tensor = torch.tensor([[next_token_id]])
+                logits, cache_k, cache_v = self(input_tensor, cache_k=cache_k, cache_v=cache_v)
 
         return new_tokens, cache_k, cache_v

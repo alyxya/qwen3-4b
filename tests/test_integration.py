@@ -342,10 +342,9 @@ def test_model_generate_with_existing_cache(model, tokenizer):
     print(f"First generation: {text_1}")
 
     # Continue generation with existing cache
-    # Cache already has all tokens (input_ids + new_tokens_1)
-    # So we can just continue without passing input_ids!
+    # Pass the FULL sequence (input_ids + new_tokens_1)
     new_tokens_2, cache_k, cache_v = model.generate(
-        input_ids=None,  # Cache already has everything!
+        input_ids=all_tokens_1,  # Full sequence so far
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
@@ -354,7 +353,7 @@ def test_model_generate_with_existing_cache(model, tokenizer):
     )
 
     # Combine for full text - clean concatenation
-    all_tokens_2 = input_ids + new_tokens_1 + new_tokens_2
+    all_tokens_2 = all_tokens_1 + new_tokens_2
     text_2 = tokenizer.decode(all_tokens_2)
     print(f"Continued generation: {text_2}")
 
@@ -385,9 +384,11 @@ def test_model_generate_chat_pattern(model, tokenizer):
     user_msg = " How are you?"
     user_ids = tokenizer.encode(user_msg)
 
-    # Add user message to cache and generate response
+    # Add user message to conversation and generate response
+    # Pass the FULL conversation including the new user message
+    conversation = conversation + user_ids
     response_2, cache_k, cache_v = model.generate(
-        input_ids=user_ids,  # NEW tokens to add to conversation
+        input_ids=conversation,  # Full conversation so far
         max_new_tokens=5,
         temperature=0.7,
         top_k=50,
@@ -395,7 +396,7 @@ def test_model_generate_chat_pattern(model, tokenizer):
         cache_v=cache_v,
     )
 
-    conversation = conversation + user_ids + response_2
+    conversation = conversation + response_2
     print(f"Full conversation: {tokenizer.decode(conversation)}")
 
     # Verify cache management
