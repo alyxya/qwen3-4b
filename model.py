@@ -25,6 +25,7 @@ class Qwen3Model(nn.Module):
         self.num_layers = config["num_hidden_layers"]
         self.num_heads = config["num_attention_heads"]
         self.num_kv_heads = config["num_key_value_heads"]
+        self.max_position_embeddings = config["max_position_embeddings"]
         self.head_dim = self.d_model // self.num_heads
 
         self.embed_tokens = Embedding(self.vocab_size, self.d_model)
