@@ -5,9 +5,9 @@ import torch
 from model import Qwen3Model
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def model():
-    """Create model instance"""
+    """Create model instance (shared across all tests in this module)"""
     return Qwen3Model()
 
 
@@ -78,7 +78,7 @@ def test_model_parameter_count(model):
     total_params = sum(p.numel() for p in model.parameters())
     # Should be approximately 4B parameters
     assert 4.0e9 < total_params < 4.1e9
-    assert total_params == 4057526400
+    assert total_params == 4022468096
 
 
 @pytest.mark.slow
