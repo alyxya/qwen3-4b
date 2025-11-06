@@ -129,6 +129,7 @@ class Qwen3Model(nn.Module):
         top_p: float | None = None,
         cache_k: list[torch.Tensor] | None = None,
         cache_v: list[torch.Tensor] | None = None,
+        stop_token_ids: list[int] | None = None,
     ) -> tuple[list[int], list[torch.Tensor], list[torch.Tensor]]:
         """
         Generate tokens autoregressively
@@ -136,17 +137,20 @@ class Qwen3Model(nn.Module):
         Args:
             input_ids: List of ALL token IDs in the sequence so far (prompt + any previous generations).
                        The cache length is compared with input_ids to determine what needs processing.
-            max_new_tokens: Maximum number of new tokens to generate
+            max_new_tokens: Maximum number of new tokens to generate (may stop earlier if stop token is encountered)
             temperature: Sampling temperature (1.0 = no change, < 1.0 = more deterministic, > 1.0 = more random)
             top_k: If set, only sample from top k tokens (None = no filtering)
             top_p: If set, nucleus sampling - sample from smallest set of tokens with cumulative probability >= top_p
             cache_k: Optional existing KV cache (key) to continue generation from.
                      If provided, cache is truncated/extended to match input_ids.
             cache_v: Optional existing KV cache (value) to continue generation from
+            stop_token_ids: Optional list of token IDs to stop generation on (e.g., [im_end_id, endoftext_id]).
+                           If a generated token matches any ID in this list, generation stops immediately.
 
         Returns:
             Tuple of (generated_ids, new_cache_k, new_cache_v)
-            - generated_ids: List of ONLY newly generated token IDs (does NOT include input_ids)
+            - generated_ids: List of ONLY newly generated token IDs (does NOT include input_ids).
+                           Generation stops early if a stop token is encountered (if stop_token_ids provided).
             - new_cache_k: Updated key cache (includes all tokens from input_ids + generated tokens)
             - new_cache_v: Updated value cache (includes all tokens from input_ids + generated tokens)
 
@@ -253,6 +257,10 @@ class Qwen3Model(nn.Module):
 
                 # Add to newly generated tokens
                 new_tokens.append(next_token_id)
+
+                # Check if we hit a stop token (e.g., <|im_end|> or <|endoftext|>)
+                if stop_token_ids is not None and next_token_id in stop_token_ids:
+                    break
 
                 # Process this token to get next logits
                 input_tensor = torch.tensor([[next_token_id]])
