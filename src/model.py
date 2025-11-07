@@ -189,13 +189,18 @@ class Qwen3Model(nn.Module):
 
         Args:
             logits: (vocab_size,) - logits for next token
-            temperature: Sampling temperature
+            temperature: Sampling temperature (0 for greedy/deterministic)
             top_k: Sample from top k tokens only
             top_p: Nucleus sampling threshold
 
         Returns:
             next_token: (1, 1) - sampled token ID
         """
+        # Greedy decoding (deterministic) when temperature is 0
+        if temperature == 0.0:
+            next_token = torch.argmax(logits, dim=-1, keepdim=True).unsqueeze(0)  # (1,) -> (1, 1)
+            return next_token
+
         if temperature != 1.0:
             logits = logits / temperature  # (vocab_size,)
 

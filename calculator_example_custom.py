@@ -152,7 +152,7 @@ Step 3: Provide final answer: 16"""
             new_tokens, cache_k, cache_v = model.generate(
                 input_ids=input_tensor,
                 max_new_tokens=200,
-                temperature=0.01,  # Nearly deterministic (our model doesn't support temperature=0)
+                temperature=0.0,  # Deterministic greedy decoding
                 cache_k=cache_k,
                 cache_v=cache_v,
                 stop_token_ids=[tokenizer.im_end_id, tokenizer.endoftext_id],
