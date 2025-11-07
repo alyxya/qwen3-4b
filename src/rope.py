@@ -43,7 +43,7 @@ class RoPE(nn.Module):
 
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
         """
-        Apply rotary position embeddings to input tensor
+        Apply rotary position embeddings to input tensor (HuggingFace style)
 
         Args:
             x: Input tensor of shape (batch_size, num_heads, seq_len, head_dim)
@@ -52,49 +52,40 @@ class RoPE(nn.Module):
         Returns:
             Rotated tensor of same shape as input
         """
-        batch_size, num_heads, seq_len, head_dim = (
-            x.shape
-        )  # x: (batch, heads, seq, head_dim)
+        batch_size, num_heads, seq_len, head_dim = x.shape
 
         # Ensure position_ids has correct shape: (seq_len,)
         if position_ids.dim() == 2:
-            # If batched (batch_size, seq_len), take first batch
-            # Assumes all batches have same positions (typical for inference)
             position_ids = position_ids[0]  # (seq,)
 
-        # Convert position_ids to match inv_freq dtype to avoid type promotion to float32
+        # Convert position_ids to match inv_freq dtype
         position_ids = position_ids.to(self.inv_freq.dtype)
 
         # Compute the rotation angles for each position
         freqs = torch.outer(position_ids, self.inv_freq)  # (seq, head_dim//2)
 
-        # Create cos and sin for rotation
+        # Create cos and sin - duplicate to match full head_dim
         cos = freqs.cos()  # (seq, head_dim//2)
         sin = freqs.sin()  # (seq, head_dim//2)
 
-        # Reshape x to separate even and odd dimensions
-        x_reshaped = x.reshape(
-            batch_size, num_heads, seq_len, head_dim // 2, 2
-        )  # (batch, heads, seq, head_dim//2, 2)
+        # Repeat cos/sin to match head_dim by interleaving
+        # HuggingFace expects cos/sin to have shape (seq, head_dim)
+        cos = torch.cat([cos, cos], dim=-1)  # (seq, head_dim)
+        sin = torch.cat([sin, sin], dim=-1)  # (seq, head_dim)
 
-        # Extract even and odd elements
-        x_even = x_reshaped[..., 0]  # (batch, heads, seq, head_dim//2)
-        x_odd = x_reshaped[..., 1]  # (batch, heads, seq, head_dim//2)
+        # Broadcast to match x shape: (1, 1, seq, head_dim)
+        cos = cos.unsqueeze(0).unsqueeze(0)
+        sin = sin.unsqueeze(0).unsqueeze(0)
 
-        # Broadcast cos/sin to match x shape
-        cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim//2)
-        sin = sin.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim//2)
-
-        # Apply rotation: [cos*x_even - sin*x_odd, sin*x_even + cos*x_odd]
-        x_rotated_even = cos * x_even - sin * x_odd  # (batch, heads, seq, head_dim//2)
-        x_rotated_odd = sin * x_even + cos * x_odd  # (batch, heads, seq, head_dim//2)
-
-        # Recombine into original shape
-        x_rotated = torch.stack(
-            [x_rotated_even, x_rotated_odd], dim=-1
-        )  # (batch, heads, seq, head_dim//2, 2)
-        x_rotated = x_rotated.reshape(
-            batch_size, num_heads, seq_len, head_dim
-        )  # (batch, heads, seq, head_dim)
+        # Apply HuggingFace's rotation: q_embed = (q * cos) + (rotate_half(q) * sin)
+        # rotate_half swaps and negates second half
+        x_rotated = (x * cos) + (self._rotate_half(x) * sin)
 
         return x_rotated
+
+    @staticmethod
+    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+        """Rotates half the hidden dims of the input (HuggingFace implementation)"""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)

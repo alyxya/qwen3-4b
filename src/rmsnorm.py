@@ -35,5 +35,14 @@ class RMSNorm(nn.Module):
         Returns:
             Tensor with the same shape as the input.
         """
-        rms = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)  # (..., 1)
-        return self.weight * (x / rms)  # (..., dim)
+        # Store input dtype and convert to float32 for numerical stability
+        # This matches HuggingFace's implementation exactly
+        input_dtype = x.dtype
+        x = x.to(torch.float32)
+
+        # Compute variance and normalize
+        variance = x.pow(2).mean(-1, keepdim=True)  # (..., 1)
+        x = x * torch.rsqrt(variance + self.eps)  # (..., d_model)
+
+        # Convert back to original dtype and apply learned weight
+        return self.weight * x.to(input_dtype)  # (..., d_model)
