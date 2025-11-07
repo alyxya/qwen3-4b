@@ -212,7 +212,7 @@ class Qwen3Model(nn.Module):
                 # Forward pass with current input
                 logits, cache_k, cache_v = self(next_input, cache_k=cache_k, cache_v=cache_v)
 
-                # Sample next token from logits (returns tensor)
+                # Sample next token from logits
                 next_token = self._sample_token(
                     logits[0, -1, :], temperature, top_k, top_p
                 )
@@ -222,20 +222,10 @@ class Qwen3Model(nn.Module):
 
                 # Check for stop token
                 if stop_token_ids is not None and next_token.item() in stop_token_ids:
-                    # Forward this stop token to update cache before breaking
-                    _, cache_k, cache_v = self(next_token, cache_k=cache_k, cache_v=cache_v)
                     break
 
                 # Next input is the token we just generated
                 next_input = next_token
-
-            # If we completed all iterations without breaking, forward the last token to cache it
-            if new_tokens.shape[1] > 0 and (
-                stop_token_ids is None or new_tokens[0, -1].item() not in stop_token_ids
-            ):
-                _, cache_k, cache_v = self(
-                    new_tokens[:, -1:], cache_k=cache_k, cache_v=cache_v
-                )
 
         return new_tokens, cache_k, cache_v
 

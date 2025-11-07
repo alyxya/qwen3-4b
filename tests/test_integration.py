@@ -412,7 +412,9 @@ def test_model_generate_chat_pattern(model, tokenizer):
     print(f"Full conversation: {tokenizer.decode(conversation)}")
 
     # Verify cache management
-    # Cache should have: system + response_1 + user_ids + response_2
-    expected_cache_len = len(system_ids) + 5 + len(user_ids) + 5
+    # Cache contains all tokens that were forwarded:
+    # - First generation forwards system_ids + first 4 generated tokens (5th not forwarded)
+    # - Second generation forwards 5th token + user_ids + next 4 generated tokens (5th not forwarded)
+    expected_cache_len = len(system_ids) + 5 + len(user_ids) + 4
     assert cache_k[0].shape[2] == expected_cache_len
     assert cache_v[0].shape[2] == expected_cache_len
