@@ -150,9 +150,8 @@ Step 3: Provide final answer: 16"""
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=200,
-                    temperature=0.1,
-                    top_p=0.9,
-                    do_sample=True,
+                    temperature=0.0,  # Deterministic generation
+                    do_sample=False,
                 )
 
             response = tokenizer.decode(
