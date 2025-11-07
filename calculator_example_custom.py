@@ -155,10 +155,7 @@ Step 3: Provide final answer: 16"""
                 temperature=0.01,  # Nearly deterministic (our model doesn't support temperature=0)
                 cache_k=cache_k,
                 cache_v=cache_v,
-                stop_token_ids=[
-                    tokenizer.special_tokens["<|im_end|>"],
-                    tokenizer.special_tokens["<|endoftext|>"],
-                ],
+                stop_token_ids=[tokenizer.im_end_id, tokenizer.endoftext_id],
             )
 
             # Decode the response
@@ -187,8 +184,8 @@ Step 3: Provide final answer: 16"""
                 continue
             else:
                 # No tool call - this is the final answer
-                # Clean up the response
-                final_response = response.replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+                # Clean up the response by removing special tokens
+                final_response = response.replace(tokenizer.im_end, "").replace(tokenizer.endoftext, "").strip()
                 print(f"  Answer: {final_response}")
                 break
 
