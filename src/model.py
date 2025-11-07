@@ -207,19 +207,12 @@ class Qwen3Model(nn.Module):
         uncached_tokens = input_ids[:, cache_len:]  # (batch, uncached_len)
 
         with torch.no_grad():
-            # Process uncached tokens
-            if cache_k is None and uncached_tokens.shape[1] > 0:
-                # Prefill: process all uncached tokens at once (efficient)
+            # Process uncached tokens - always batch process for efficiency
+            if uncached_tokens.shape[1] > 0:
+                # Process all uncached tokens at once (efficient for both prefill and continuation)
                 logits, cache_k, cache_v = self(
-                    uncached_tokens, cache_k=None, cache_v=None
+                    uncached_tokens, cache_k=cache_k, cache_v=cache_v
                 )
-            else:
-                # Add new tokens incrementally to existing cache
-                for i in range(uncached_tokens.shape[1]):
-                    single_token = uncached_tokens[:, i : i + 1]  # (batch, 1)
-                    logits, cache_k, cache_v = self(
-                        single_token, cache_k=cache_k, cache_v=cache_v
-                    )
 
             # Now cache contains all input_ids and we have logits from the last token
             # Generate new tokens one at a time
