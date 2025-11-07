@@ -33,13 +33,25 @@ class TransformerBlock(nn.Module):
     def forward(
         self, x: torch.Tensor, cache_k: torch.Tensor | None = None, cache_v: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Attention block
-        attn_output, new_cache_k, new_cache_v = self.self_attn(
-            self.input_layernorm(x), cache_k, cache_v
-        )
-        x = x + attn_output
+        """Forward pass through transformer block
 
-        # MLP block
-        x = x + self.mlp(self.post_attention_layernorm(x))
+        Args:
+            x: (batch, seq, d_model) - input hidden states
+            cache_k: (batch, num_kv_heads, cache_len, head_dim) - cached keys
+            cache_v: (batch, num_kv_heads, cache_len, head_dim) - cached values
+
+        Returns:
+            x: (batch, seq, d_model) - output hidden states
+            new_cache_k: (batch, num_kv_heads, cache_len + seq, head_dim) - updated keys
+            new_cache_v: (batch, num_kv_heads, cache_len + seq, head_dim) - updated values
+        """
+        # Attention block with residual connection
+        attn_output, new_cache_k, new_cache_v = self.self_attn(
+            self.input_layernorm(x), cache_k, cache_v  # (batch, seq, d_model)
+        )
+        x = x + attn_output  # (batch, seq, d_model)
+
+        # MLP block with residual connection
+        x = x + self.mlp(self.post_attention_layernorm(x))  # (batch, seq, d_model)
 
         return x, new_cache_k, new_cache_v

@@ -80,11 +80,18 @@ class Qwen3Model(nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        cache_k: list[torch.Tensor] | None = None,
-        cache_v: list[torch.Tensor] | None = None,
+        input_ids: torch.Tensor,  # (batch, seq)
+        cache_k: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
+        cache_v: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
-        hidden_states = self.embed_tokens(input_ids)  # (batch, seq, dim)
+        """Forward pass through the model
+
+        Returns:
+            logits: (batch, seq, vocab_size)
+            cache_k: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
+            cache_v: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
+        """
+        hidden_states = self.embed_tokens(input_ids)  # (batch, seq, d_model)
 
         if cache_k is None:
             cache_k = [None] * self.num_layers
@@ -96,29 +103,32 @@ class Qwen3Model(nn.Module):
 
         for layer_idx, layer in enumerate(self.layers):
             hidden_states, new_k, new_v = layer(
-                hidden_states,
+                hidden_states,  # (batch, seq, d_model)
                 cache_k=cache_k[layer_idx],
                 cache_v=cache_v[layer_idx],
-            )  # hidden_states: (batch, seq, dim)
+            )
+            # hidden_states: (batch, seq, d_model)
+            # new_k: (batch, num_kv_heads, cache_len + seq, head_dim)
+            # new_v: (batch, num_kv_heads, cache_len + seq, head_dim)
             new_cache_k.append(new_k)
             new_cache_v.append(new_v)
 
-        hidden_states = self.norm(hidden_states)  # (batch, seq, dim)
+        hidden_states = self.norm(hidden_states)  # (batch, seq, d_model)
         logits = torch.einsum(
             "bsd,vd->bsv", hidden_states, self.lm_head
-        )  # (batch, seq, vocab)
+        )  # (batch, seq, vocab_size)
 
         return logits, new_cache_k, new_cache_v
 
     def generate(
         self,
-        input_ids: torch.Tensor,
+        input_ids: torch.Tensor,  # (batch, seq) or (seq,)
         max_new_tokens: int = 50,
         temperature: float = 1.0,
         top_k: int | None = None,
         top_p: float | None = None,
-        cache_k: list[torch.Tensor] | None = None,
-        cache_v: list[torch.Tensor] | None = None,
+        cache_k: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
+        cache_v: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
         stop_token_ids: list[int] | None = None,
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
         """Generate tokens autoregressively with optional KV caching
@@ -133,15 +143,17 @@ class Qwen3Model(nn.Module):
             stop_token_ids: Stop if any of these tokens are generated
 
         Returns:
-            (new_tokens, cache_k, cache_v) where new_tokens has shape (batch, num_generated)
+            new_tokens: (batch, num_generated) - only the newly generated tokens
+            cache_k: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
+            cache_v: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
         """
         if input_ids.numel() == 0:
             raise ValueError("input_ids cannot be empty")
 
         if input_ids.dim() == 1:
-            input_ids = input_ids.unsqueeze(0)
+            input_ids = input_ids.unsqueeze(0)  # (seq,) -> (1, seq)
 
-        batch_size, input_len = input_ids.shape
+        batch_size, input_len = input_ids.shape  # (batch, seq)
         cache_len = 0 if cache_k is None else cache_k[0].shape[2]
 
         # Truncate cache if needed to ensure at least last token is reprocessed
@@ -154,42 +166,52 @@ class Qwen3Model(nn.Module):
                 cache_k = cache_v = None
             cache_len = truncate_to
 
-        next_input = input_ids[:, cache_len:]
-        new_tokens = torch.empty((batch_size, 0), dtype=torch.long, device=input_ids.device)
+        next_input = input_ids[:, cache_len:]  # (batch, uncached_len)
+        new_tokens = torch.empty((batch_size, 0), dtype=torch.long, device=input_ids.device)  # (batch, 0)
 
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                logits, cache_k, cache_v = self(next_input, cache_k, cache_v)
-                next_token = self._sample_token(logits[0, -1, :], temperature, top_k, top_p)
-                new_tokens = torch.cat([new_tokens, next_token], dim=1)
+                logits, cache_k, cache_v = self(next_input, cache_k, cache_v)  # logits: (batch, seq, vocab_size)
+                next_token = self._sample_token(logits[0, -1, :], temperature, top_k, top_p)  # (1, 1)
+                new_tokens = torch.cat([new_tokens, next_token], dim=1)  # (batch, num_generated)
 
                 if stop_token_ids and next_token.item() in stop_token_ids:
                     break
 
-                next_input = next_token
+                next_input = next_token  # (1, 1)
 
         return new_tokens, cache_k, cache_v
 
     def _sample_token(
         self, logits: torch.Tensor, temperature: float, top_k: int | None, top_p: float | None
     ) -> torch.Tensor:
-        """Sample token with temperature, top-k, and top-p filtering. Returns shape (1, 1)"""
+        """Sample token with temperature, top-k, and top-p filtering
+
+        Args:
+            logits: (vocab_size,) - logits for next token
+            temperature: Sampling temperature
+            top_k: Sample from top k tokens only
+            top_p: Nucleus sampling threshold
+
+        Returns:
+            next_token: (1, 1) - sampled token ID
+        """
         if temperature != 1.0:
-            logits = logits / temperature
+            logits = logits / temperature  # (vocab_size,)
 
         if top_k:
-            top_k_logits, top_k_indices = torch.topk(logits, top_k)
-            logits = torch.full_like(logits, float("-inf"))
-            logits[top_k_indices] = top_k_logits
+            top_k_logits, top_k_indices = torch.topk(logits, top_k)  # (top_k,), (top_k,)
+            logits = torch.full_like(logits, float("-inf"))  # (vocab_size,)
+            logits[top_k_indices] = top_k_logits  # (vocab_size,)
 
-        probs = torch.softmax(logits, dim=-1)
+        probs = torch.softmax(logits, dim=-1)  # (vocab_size,)
 
         if top_p:
-            sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-            sorted_indices_to_remove = cumulative_probs > top_p
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True)  # (vocab_size,), (vocab_size,)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)  # (vocab_size,)
+            sorted_indices_to_remove = cumulative_probs > top_p  # (vocab_size,)
             sorted_indices_to_remove[0] = False
-            probs[sorted_indices[sorted_indices_to_remove]] = 0.0
-            probs = probs / probs.sum()
+            probs[sorted_indices[sorted_indices_to_remove]] = 0.0  # (vocab_size,)
+            probs = probs / probs.sum()  # (vocab_size,)
 
-        return torch.multinomial(probs, num_samples=1).unsqueeze(0)
+        return torch.multinomial(probs, num_samples=1).unsqueeze(0)  # (1,) -> (1, 1)
