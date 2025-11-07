@@ -205,32 +205,38 @@ class Qwen3Model(nn.Module):
 
         # Start with uncached tokens, then generate new tokens one at a time
         next_input = input_ids[:, cache_len:]  # (batch, uncached_len)
-        new_tokens_list = []
+        new_tokens = torch.empty((batch_size, 0), dtype=torch.long, device=input_ids.device)
 
         with torch.no_grad():
-            for i in range(max_new_tokens + 1):  # +1 for initial prefill
-                # Forward pass
+            for _ in range(max_new_tokens):
+                # Forward pass with current input
                 logits, cache_k, cache_v = self(next_input, cache_k=cache_k, cache_v=cache_v)
 
-                # If this was the prefill, continue to first generation
-                if i == 0:
-                    continue
-
-                # Sample next token from logits
-                next_token_id = self._sample_token(
+                # Sample next token from logits (returns tensor)
+                next_token = self._sample_token(
                     logits[0, -1, :], temperature, top_k, top_p
                 )
 
-                # Add to generated tokens and check for stop
-                new_tokens_list.append(next_token_id)
-                if stop_token_ids is not None and next_token_id in stop_token_ids:
+                # Add to generated tokens
+                new_tokens = torch.cat([new_tokens, next_token], dim=1)
+
+                # Check for stop token
+                if stop_token_ids is not None and next_token.item() in stop_token_ids:
+                    # Forward this stop token to update cache before breaking
+                    _, cache_k, cache_v = self(next_token, cache_k=cache_k, cache_v=cache_v)
                     break
 
-                # Prepare next input (single token)
-                next_input = torch.tensor([[next_token_id]], dtype=torch.long)
+                # Next input is the token we just generated
+                next_input = next_token
 
-        # Convert to tensor
-        new_tokens = torch.tensor([new_tokens_list], dtype=torch.long) if new_tokens_list else torch.empty((1, 0), dtype=torch.long)
+            # If we completed all iterations without breaking, forward the last token to cache it
+            if new_tokens.shape[1] > 0 and (
+                stop_token_ids is None or new_tokens[0, -1].item() not in stop_token_ids
+            ):
+                _, cache_k, cache_v = self(
+                    new_tokens[:, -1:], cache_k=cache_k, cache_v=cache_v
+                )
+
         return new_tokens, cache_k, cache_v
 
     def _sample_token(
@@ -239,8 +245,12 @@ class Qwen3Model(nn.Module):
         temperature: float,
         top_k: int | None,
         top_p: float | None,
-    ) -> int:
-        """Sample a token from logits with temperature, top-k, and top-p filtering"""
+    ) -> torch.Tensor:
+        """Sample a token from logits with temperature, top-k, and top-p filtering
+
+        Returns:
+            Tensor of shape (1, 1) containing the sampled token
+        """
         # Apply temperature
         if temperature != 1.0:
             logits = logits / temperature
@@ -263,4 +273,5 @@ class Qwen3Model(nn.Module):
             probs[sorted_indices[sorted_indices_to_remove]] = 0.0
             probs = probs / probs.sum()
 
-        return torch.multinomial(probs, num_samples=1).item()
+        # Sample and return as (1, 1) tensor
+        return torch.multinomial(probs, num_samples=1).unsqueeze(0)
