@@ -203,75 +203,64 @@ class Qwen3Model(nn.Module):
                 cache_v = None
             cache_len = truncate_to
 
-        # Process uncached suffix (always includes at least the last token)
-        uncached_tokens = input_ids[:, cache_len:]  # (batch, uncached_len)
+        # Start with uncached tokens, then generate new tokens one at a time
+        next_input = input_ids[:, cache_len:]  # (batch, uncached_len)
+        new_tokens_list = []
 
         with torch.no_grad():
-            # Process all uncached tokens at once (efficient for both prefill and continuation)
-            # Note: uncached_tokens is guaranteed to be non-empty due to truncation logic above
-            logits, cache_k, cache_v = self(
-                uncached_tokens, cache_k=cache_k, cache_v=cache_v
-            )
+            for i in range(max_new_tokens + 1):  # +1 for initial prefill
+                # Forward pass
+                logits, cache_k, cache_v = self(next_input, cache_k=cache_k, cache_v=cache_v)
 
-            # Now cache contains all input_ids and we have logits from the last token
-            # Generate new tokens one at a time
-            new_tokens_list = []
-            for _ in range(max_new_tokens):
-                # Get logits for the last token (support batch_size=1 for now)
-                next_token_logits = logits[0, -1, :]  # (vocab_size,)
+                # If this was the prefill, continue to first generation
+                if i == 0:
+                    continue
 
-                # Apply temperature
-                if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
+                # Sample next token from logits
+                next_token_id = self._sample_token(
+                    logits[0, -1, :], temperature, top_k, top_p
+                )
 
-                # Apply top-k filtering if specified
-                if top_k is not None:
-                    top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
-                    # Set all other logits to -inf
-                    next_token_logits = torch.full_like(
-                        next_token_logits, float("-inf")
-                    )
-                    next_token_logits[top_k_indices] = top_k_logits
-
-                # Convert to probabilities
-                probs = torch.softmax(next_token_logits, dim=-1)
-
-                # Apply top-p (nucleus) sampling if specified
-                if top_p is not None:
-                    sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-                    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-
-                    # Remove tokens with cumulative probability above the threshold
-                    sorted_indices_to_remove = cumulative_probs > top_p
-                    # Keep at least one token
-                    sorted_indices_to_remove[0] = False
-
-                    # Create mask for original indices
-                    indices_to_remove = sorted_indices[sorted_indices_to_remove]
-                    probs[indices_to_remove] = 0.0
-                    # Renormalize
-                    probs = probs / probs.sum()
-
-                # Sample from the distribution
-                next_token_id = torch.multinomial(probs, num_samples=1).item()
-
-                # Add to newly generated tokens
+                # Add to generated tokens and check for stop
                 new_tokens_list.append(next_token_id)
-
-                # Check if we hit a stop token (e.g., <|im_end|> or <|endoftext|>)
                 if stop_token_ids is not None and next_token_id in stop_token_ids:
                     break
 
-                # Process this token to get next logits
-                input_tensor = torch.tensor([[next_token_id]])
-                logits, cache_k, cache_v = self(
-                    input_tensor, cache_k=cache_k, cache_v=cache_v
-                )
+                # Prepare next input (single token)
+                next_input = torch.tensor([[next_token_id]], dtype=torch.long)
 
-        # Convert list of tokens to tensor (batch, num_generated)
-        if len(new_tokens_list) > 0:
-            new_tokens = torch.tensor([new_tokens_list])
-        else:
-            new_tokens = torch.tensor([[]]).long()
-
+        # Convert to tensor
+        new_tokens = torch.tensor([new_tokens_list], dtype=torch.long) if new_tokens_list else torch.empty((1, 0), dtype=torch.long)
         return new_tokens, cache_k, cache_v
+
+    def _sample_token(
+        self,
+        logits: torch.Tensor,
+        temperature: float,
+        top_k: int | None,
+        top_p: float | None,
+    ) -> int:
+        """Sample a token from logits with temperature, top-k, and top-p filtering"""
+        # Apply temperature
+        if temperature != 1.0:
+            logits = logits / temperature
+
+        # Apply top-k filtering
+        if top_k is not None:
+            top_k_logits, top_k_indices = torch.topk(logits, top_k)
+            logits = torch.full_like(logits, float("-inf"))
+            logits[top_k_indices] = top_k_logits
+
+        # Convert to probabilities
+        probs = torch.softmax(logits, dim=-1)
+
+        # Apply top-p (nucleus) sampling
+        if top_p is not None:
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+            sorted_indices_to_remove = cumulative_probs > top_p
+            sorted_indices_to_remove[0] = False  # Keep at least one token
+            probs[sorted_indices[sorted_indices_to_remove]] = 0.0
+            probs = probs / probs.sum()
+
+        return torch.multinomial(probs, num_samples=1).item()
