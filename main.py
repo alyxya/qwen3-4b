@@ -42,16 +42,19 @@ def main():
         input_ids = tokenizer.encode(prompt)
         print(f"Prompt tokens: {len(input_ids)}")
 
+        # Convert to tensor for generation
+        input_tensor = torch.tensor([input_ids])
+
         # Generate using the model's generate method
         new_tokens, _, _ = model.generate(
-            input_ids=input_ids,
+            input_ids=input_tensor,
             max_new_tokens=30,
             temperature=0.7,  # Slightly less random
             top_k=50,  # Sample from top 50 tokens
         )
 
         # Combine prompt and generated tokens
-        all_tokens = input_ids + new_tokens
+        all_tokens = input_ids + new_tokens[0].tolist()
         generated_text = tokenizer.decode(all_tokens)
 
         print("Generated text:")

@@ -277,18 +277,19 @@ def test_model_generate_method(model, tokenizer):
 
     # Encode prompt
     input_ids = tokenizer.encode(prompt)
+    input_tensor = torch.tensor([input_ids])
 
     # Use the generate method
     new_tokens, cache_k, cache_v = model.generate(
-        input_ids=input_ids,
+        input_ids=input_tensor,
         max_new_tokens=10,
         temperature=0.8,
         top_k=50,
     )
 
     # Verify we got only new tokens
-    assert len(new_tokens) == 10
-    assert new_tokens not in input_ids  # These are new tokens
+    assert new_tokens.shape[1] == 10  # (1, 10)
+    assert new_tokens.shape[0] == 1  # batch size
 
     # Verify cache was returned
     assert cache_k is not None
@@ -297,7 +298,7 @@ def test_model_generate_method(model, tokenizer):
     assert len(cache_v) == 36
 
     # Decode and verify it's valid text
-    all_tokens = input_ids + new_tokens
+    all_tokens = input_ids + new_tokens[0].tolist()
     generated_text = tokenizer.decode(all_tokens)
     assert len(generated_text) > len(prompt)
     assert generated_text.startswith(prompt)
@@ -311,18 +312,19 @@ def test_model_generate_with_top_p(model, tokenizer):
     prompt = "The quick brown"
 
     input_ids = tokenizer.encode(prompt)
+    input_tensor = torch.tensor([input_ids])
 
     # Use top-p sampling
     new_tokens, cache_k, cache_v = model.generate(
-        input_ids=input_ids,
+        input_ids=input_tensor,
         max_new_tokens=5,
         temperature=1.0,
         top_p=0.9,
     )
 
     # Verify output
-    assert len(new_tokens) == 5
-    all_tokens = input_ids + new_tokens
+    assert new_tokens.shape[1] == 5
+    all_tokens = input_ids + new_tokens[0].tolist()
     generated_text = tokenizer.decode(all_tokens)
     assert generated_text.startswith(prompt)
 
@@ -336,21 +338,23 @@ def test_model_generate_with_existing_cache(model, tokenizer):
 
     # First generation - create cache
     input_ids = tokenizer.encode(prompt)
+    input_tensor = torch.tensor([input_ids])
     new_tokens_1, cache_k, cache_v = model.generate(
-        input_ids=input_ids,
+        input_ids=input_tensor,
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
     )
 
-    all_tokens_1 = input_ids + new_tokens_1
+    all_tokens_1 = input_ids + new_tokens_1[0].tolist()
     text_1 = tokenizer.decode(all_tokens_1)
     print(f"First generation: {text_1}")
 
     # Continue generation with existing cache
     # Pass the FULL sequence (input_ids + new_tokens_1)
+    all_tokens_1_tensor = torch.tensor([all_tokens_1])
     new_tokens_2, cache_k, cache_v = model.generate(
-        input_ids=all_tokens_1,  # Full sequence so far
+        input_ids=all_tokens_1_tensor,  # Full sequence so far
         max_new_tokens=3,
         temperature=0.5,
         top_k=10,
@@ -359,12 +363,12 @@ def test_model_generate_with_existing_cache(model, tokenizer):
     )
 
     # Combine for full text - clean concatenation
-    all_tokens_2 = all_tokens_1 + new_tokens_2
+    all_tokens_2 = all_tokens_1 + new_tokens_2[0].tolist()
     text_2 = tokenizer.decode(all_tokens_2)
     print(f"Continued generation: {text_2}")
 
     # Verify continuation worked
-    assert len(new_tokens_2) == 3  # Got exactly 3 new tokens
+    assert new_tokens_2.shape[1] == 3  # Got exactly 3 new tokens
     assert text_2.startswith(text_1)
 
 
@@ -374,16 +378,17 @@ def test_model_generate_chat_pattern(model, tokenizer):
     # Initial prompt
     system_prompt = "You are helpful."
     system_ids = tokenizer.encode(system_prompt)
+    system_tensor = torch.tensor([system_ids])
 
     # Generate first response
     response_1, cache_k, cache_v = model.generate(
-        input_ids=system_ids,
+        input_ids=system_tensor,
         max_new_tokens=5,
         temperature=0.7,
         top_k=50,
     )
 
-    conversation = system_ids + response_1
+    conversation = system_ids + response_1[0].tolist()
     print(f"System + Response 1: {tokenizer.decode(conversation)}")
 
     # User adds a message (NEW context)
@@ -393,8 +398,9 @@ def test_model_generate_chat_pattern(model, tokenizer):
     # Add user message to conversation and generate response
     # Pass the FULL conversation including the new user message
     conversation = conversation + user_ids
+    conversation_tensor = torch.tensor([conversation])
     response_2, cache_k, cache_v = model.generate(
-        input_ids=conversation,  # Full conversation so far
+        input_ids=conversation_tensor,  # Full conversation so far
         max_new_tokens=5,
         temperature=0.7,
         top_k=50,
@@ -402,7 +408,7 @@ def test_model_generate_chat_pattern(model, tokenizer):
         cache_v=cache_v,
     )
 
-    conversation = conversation + response_2
+    conversation = conversation + response_2[0].tolist()
     print(f"Full conversation: {tokenizer.decode(conversation)}")
 
     # Verify cache management
