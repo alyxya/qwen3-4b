@@ -37,9 +37,14 @@ def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]
 
 def load_weights(
     repo_id: str = "Qwen/Qwen3-4B-Instruct-2507",
+    device: str = "cpu",
 ) -> dict[str, torch.Tensor]:
     """
     Load all model weights from HuggingFace
+
+    Args:
+        repo_id: HuggingFace model repository ID
+        device: Device to load weights to ("cpu", "mps", "cuda", etc.)
 
     Returns:
         Dictionary mapping parameter names to tensors
@@ -53,7 +58,8 @@ def load_weights(
         weight_path = hf_hub_download(repo_id, weight_file)
 
         # Load tensors from safetensors file
-        with safe_open(weight_path, framework="pt", device="cpu") as f:
+        # Weights are natively bfloat16, loaded directly to target device
+        with safe_open(weight_path, framework="pt", device=device) as f:
             for key in f.keys():
                 all_weights[key] = f.get_tensor(key)
 

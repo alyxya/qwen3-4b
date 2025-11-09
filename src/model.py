@@ -14,7 +14,11 @@ from .load_weights import load_weights
 class Qwen3Model(nn.Module):
     """Qwen3 4B Language Model"""
 
-    def __init__(self, repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> None:
+    def __init__(
+        self,
+        repo_id: str = "Qwen/Qwen3-4B-Instruct-2507",
+        device: str = "cpu",
+    ) -> None:
         super().__init__()
 
         config_path = hf_hub_download(repo_id, "config.json")
@@ -28,6 +32,7 @@ class Qwen3Model(nn.Module):
         self.num_kv_heads = config["num_key_value_heads"]
         self.max_position_embeddings = config["max_position_embeddings"]
         self.head_dim = config["head_dim"]
+        self.device = device
 
         # Use meta device to avoid allocating memory for initial weights
         # that will be immediately overwritten by pretrained weights
@@ -55,7 +60,7 @@ class Qwen3Model(nn.Module):
 
     def _load_pretrained_weights(self, repo_id: str) -> None:
         """Load pretrained weights from HuggingFace"""
-        hf_weights = load_weights(repo_id)
+        hf_weights = load_weights(repo_id, device=self.device)
 
         # Strip "model." prefix from HuggingFace parameter names
         mapped_weights = {
@@ -77,6 +82,9 @@ class Qwen3Model(nn.Module):
             print(f"Warning: Missing keys: {missing_keys}")
         if unexpected_keys:
             print(f"Warning: Unexpected keys: {unexpected_keys}")
+
+        # Move entire model to target device (handles RoPE buffers and any other CPU tensors)
+        self.to(self.device)
 
     def forward(
         self,
@@ -149,6 +157,9 @@ class Qwen3Model(nn.Module):
         """
         if input_ids.numel() == 0:
             raise ValueError("input_ids cannot be empty")
+
+        # Move input to model device
+        input_ids = input_ids.to(self.device)
 
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)  # (seq,) -> (1, seq)

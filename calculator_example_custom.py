@@ -77,10 +77,12 @@ def execute_tool(tool_call: dict) -> float:
 
 def main():
     # Load model and tokenizer
+    # Specify device explicitly: device="mps", device="cpu", device="cuda"
     print("Loading custom Qwen3-4B-Instruct model...")
-    model = Qwen3Model()
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    model = Qwen3Model(device=device)
     tokenizer = Tokenizer()
-    print("Model loaded!\n")
+    print(f"Model loaded on device: {model.device}\n")
 
     # System prompt explaining tool calling
     system_prompt = """You are a calculator assistant. You MUST use tools for ALL arithmetic operations. Never calculate numbers directly.
