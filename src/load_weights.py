@@ -7,7 +7,7 @@ from safetensors import safe_open
 import torch
 
 
-def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]:
+def list_weight_files(repo_id: str) -> list[str]:
     """
     List all weight files in the HuggingFace repo
 
@@ -36,8 +36,8 @@ def list_weight_files(repo_id: str = "Qwen/Qwen3-4B-Instruct-2507") -> list[str]
 
 
 def load_weights(
-    repo_id: str = "Qwen/Qwen3-4B-Instruct-2507",
-    device: str = "cpu",
+    repo_id: str,
+    device: str,
 ) -> dict[str, torch.Tensor]:
     """
     Load all model weights from HuggingFace

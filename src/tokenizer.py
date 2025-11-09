@@ -10,10 +10,9 @@ from huggingface_hub import hf_hub_download
 class Tokenizer:
     """Minimal BPE tokenizer for Qwen3 models"""
 
-    def __init__(self) -> None:
+    def __init__(self, repo_id: str) -> None:
         """Initialize the tokenizer and load from HuggingFace"""
         # Download tokenizer config from HuggingFace Hub
-        repo_id: str = "Qwen/Qwen3-4B-Instruct-2507"
         tokenizer_path: str = hf_hub_download(repo_id, "tokenizer.json")
 
         # Load everything from tokenizer.json

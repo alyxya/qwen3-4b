@@ -25,7 +25,10 @@ def model():
     """
     from src.model import Qwen3Model
 
-    return Qwen3Model()
+    return Qwen3Model(
+        repo_id="Qwen/Qwen3-4B-Instruct-2507",
+        device="cpu"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -37,4 +40,4 @@ def tokenizer():
     """
     from src.tokenizer import Tokenizer
 
-    return Tokenizer()
+    return Tokenizer(repo_id="Qwen/Qwen3-4B-Instruct-2507")

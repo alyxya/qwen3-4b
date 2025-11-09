@@ -16,8 +16,8 @@ class Qwen3Model(nn.Module):
 
     def __init__(
         self,
-        repo_id: str = "Qwen/Qwen3-4B-Instruct-2507",
-        device: str = "cpu",
+        repo_id: str,
+        device: str,
     ) -> None:
         super().__init__()
 

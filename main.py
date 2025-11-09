@@ -18,9 +18,11 @@ def main():
 
     # Load model and tokenizer
     print("Loading model and tokenizer...")
-    model = Qwen3Model()
-    tokenizer = Tokenizer()
-    print("Model loaded successfully!")
+    repo_id = "Qwen/Qwen3-4B-Instruct-2507"
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    model = Qwen3Model(repo_id=repo_id, device=device)
+    tokenizer = Tokenizer(repo_id=repo_id)
+    print(f"Model loaded successfully on {device}!")
     print()
 
     # Example prompts

@@ -77,11 +77,12 @@ def execute_tool(tool_call: dict) -> float:
 
 def main():
     # Load model and tokenizer
-    # Specify device explicitly: device="mps", device="cpu", device="cuda"
+    # Specify device explicitly: "mps", "cpu", or "cuda"
     print("Loading custom Qwen3-4B-Instruct model...")
+    repo_id = "Qwen/Qwen3-4B-Instruct-2507"
     device = "mps" if torch.backends.mps.is_available() else "cpu"
-    model = Qwen3Model(device=device)
-    tokenizer = Tokenizer()
+    model = Qwen3Model(repo_id=repo_id, device=device)
+    tokenizer = Tokenizer(repo_id=repo_id)
     print(f"Model loaded on device: {model.device}\n")
 
     # System prompt explaining tool calling
