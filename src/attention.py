@@ -55,17 +55,23 @@ class Attention(nn.Module):
         start_pos = cache_k.shape[2] if cache_k is not None else 0
         position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)  # (seq,)
 
-        # Project and reshape to heads
-        q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        # q: (batch, seq, num_heads * head_dim) -> (batch, seq, num_heads, head_dim) -> (batch, num_heads, seq, head_dim)
-        k = self.k_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        # k: (batch, seq, num_kv_heads * head_dim) -> (batch, seq, num_kv_heads, head_dim) -> (batch, num_kv_heads, seq, head_dim)
+        # Project, reshape, normalize, then transpose (matches HuggingFace order)
+        q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim)
+        # q: (batch, seq, num_heads * head_dim) -> (batch, seq, num_heads, head_dim)
+        q = self.q_norm(q).transpose(1, 2)
+        # q: (batch, seq, num_heads, head_dim) -> (batch, num_heads, seq, head_dim)
+
+        k = self.k_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
+        # k: (batch, seq, num_kv_heads * head_dim) -> (batch, seq, num_kv_heads, head_dim)
+        k = self.k_norm(k).transpose(1, 2)
+        # k: (batch, seq, num_kv_heads, head_dim) -> (batch, num_kv_heads, seq, head_dim)
+
         v = self.v_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
         # v: (batch, seq, num_kv_heads * head_dim) -> (batch, seq, num_kv_heads, head_dim) -> (batch, num_kv_heads, seq, head_dim)
 
-        # Apply RMSNorm and RoPE
-        q = self.rope(self.q_norm(q), position_ids)  # (batch, num_heads, seq, head_dim)
-        k = self.rope(self.k_norm(k), position_ids)  # (batch, num_kv_heads, seq, head_dim)
+        # Apply RoPE
+        q = self.rope(q, position_ids)  # (batch, num_heads, seq, head_dim)
+        k = self.rope(k, position_ids)  # (batch, num_kv_heads, seq, head_dim)
 
         # Concatenate with cache
         if cache_k is not None:
@@ -76,7 +82,7 @@ class Attention(nn.Module):
         q = q.view(batch_size, self.num_kv_heads, self.num_queries_per_kv, seq_len, self.head_dim)
         # (batch, num_heads, seq, head_dim) -> (batch, num_kv_heads, queries_per_kv, seq, head_dim)
 
-        # Attention scores
+        # Attention scores using einsum
         scores = torch.einsum("bghsd,bgkd->bghsk", q, k) / (self.head_dim**0.5)
         # (batch, num_kv_heads, queries_per_kv, seq, head_dim) x (batch, num_kv_heads, kv_seq, head_dim)
         # -> (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
@@ -90,8 +96,11 @@ class Attention(nn.Module):
             )  # (seq, kv_seq)
             scores = scores + mask  # (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
 
-        # Apply attention and project output
-        attn_weights = torch.softmax(scores, dim=-1)  # (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
+        # Softmax in float32 for numerical stability (prevents overflow/underflow in exp)
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1, dtype=torch.float32).to(q.dtype)
+        # (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
+
+        # Apply attention using einsum
         output = torch.einsum("bghsk,bgkd->bghsd", attn_weights, v)
         # (batch, num_kv_heads, queries_per_kv, seq, kv_seq) x (batch, num_kv_heads, kv_seq, head_dim)
         # -> (batch, num_kv_heads, queries_per_kv, seq, head_dim)
