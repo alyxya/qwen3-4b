@@ -17,7 +17,7 @@ class Qwen3Model(nn.Module):
     def __init__(
         self,
         repo_id: str,
-        device: str,
+        device: str | torch.device,
     ) -> None:
         super().__init__()
 
@@ -32,7 +32,9 @@ class Qwen3Model(nn.Module):
         self.num_kv_heads = config["num_key_value_heads"]
         self.max_position_embeddings = config["max_position_embeddings"]
         self.head_dim = config["head_dim"]
-        self.device = device
+
+        # Normalize device to device object
+        self.device = device if isinstance(device, torch.device) else torch.device(device)
 
         # Use meta device to avoid allocating memory for initial weights
         # that will be immediately overwritten by pretrained weights

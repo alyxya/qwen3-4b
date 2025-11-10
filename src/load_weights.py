@@ -35,20 +35,16 @@ def list_weight_files(repo_id: str) -> list[str]:
         return ["model.safetensors"]
 
 
-def load_weights(
-    repo_id: str,
-    device: str,
-) -> dict[str, torch.Tensor]:
+def _load_weights_impl(repo_id: str, device: torch.device) -> dict[str, torch.Tensor]:
     """
-    Load all model weights from HuggingFace
+    Implementation of weight loading (used by both local and remote paths)
 
     Args:
         repo_id: HuggingFace model repository ID
-        device: Device to load weights to ("cpu", "mps", "cuda", etc.)
+        device: Device to load weights to
 
     Returns:
         Dictionary mapping parameter names to tensors
-        Example: {"model.embed_tokens.weight": tensor(...), ...}
     """
     weight_files = list_weight_files(repo_id)
 
@@ -59,8 +55,44 @@ def load_weights(
 
         # Load tensors from safetensors file
         # Weights are natively bfloat16, loaded directly to target device
-        with safe_open(weight_path, framework="pt", device=device) as f:
+        # Note: safe_open requires device as string, not torch.device object
+        with safe_open(weight_path, framework="pt", device=str(device)) as f:
             for key in f.keys():
                 all_weights[key] = f.get_tensor(key)
 
     return all_weights
+
+
+def load_weights(
+    repo_id: str,
+    device: str | torch.device,
+) -> dict[str, torch.Tensor]:
+    """
+    Load all model weights from HuggingFace
+
+    Automatically detects mycelya devices and loads weights directly on remote GPU
+    without transferring through local machine.
+
+    Args:
+        repo_id: HuggingFace model repository ID
+        device: Device to load weights to ("cpu", "mps", "cuda", mycelya device, etc.)
+
+    Returns:
+        Dictionary mapping parameter names to tensors
+        Example: {"model.embed_tokens.weight": tensor(...), ...}
+    """
+    # Normalize to device object
+    if isinstance(device, str):
+        device = torch.device(device)
+
+    # Check if this is a mycelya device
+    if device.type == "mycelya":
+        import mycelya_torch
+
+        # Create remote version of weight loader and execute on remote GPU
+        # mycelya_torch will automatically map the device to the remote machine
+        remote_load = mycelya_torch.remote(_load_weights_impl)
+        return remote_load(repo_id, device)
+    else:
+        # Local loading
+        return _load_weights_impl(repo_id, device)
