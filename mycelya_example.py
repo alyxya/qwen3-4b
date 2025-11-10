@@ -31,6 +31,7 @@ def main():
 
     # 2. Get mycelya device
     device = machine.device("cuda")
+    # device = torch.device("mps")
     print(f"Remote device: {device}")
 
     try:

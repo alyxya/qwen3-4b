@@ -3,7 +3,6 @@ Load model weights from HuggingFace for Qwen3 4B
 """
 
 from huggingface_hub import hf_hub_download
-from safetensors import safe_open
 import torch
 
 
@@ -49,6 +48,8 @@ def _load_weights_impl(repo_id: str, device: torch.device) -> dict[str, torch.Te
     weight_files = list_weight_files(repo_id)
 
     all_weights: dict[str, torch.Tensor] = {}
+
+    from safetensors import safe_open
 
     for weight_file in weight_files:
         weight_path = hf_hub_download(repo_id, weight_file)
