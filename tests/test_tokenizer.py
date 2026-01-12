@@ -1,13 +1,6 @@
 """Tests for tokenizer"""
 
 import pytest
-from src.tokenizer import Tokenizer
-
-
-@pytest.fixture
-def tokenizer():
-    """Create tokenizer instance"""
-    return Tokenizer()
 
 
 def test_tokenizer_creation(tokenizer):

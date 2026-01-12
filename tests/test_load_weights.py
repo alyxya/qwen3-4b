@@ -2,10 +2,12 @@
 
 from src.load_weights import list_weight_files
 
+REPO_ID = "Qwen/Qwen3-4B-Instruct-2507"
+
 
 def test_list_weight_files():
     """Test that weight files can be listed"""
-    weight_files = list_weight_files()
+    weight_files = list_weight_files(REPO_ID)
 
     assert isinstance(weight_files, list)
     assert len(weight_files) > 0
@@ -15,7 +17,7 @@ def test_list_weight_files():
 
 def test_weight_files_sorted():
     """Test that weight files are returned in sorted order"""
-    weight_files = list_weight_files()
+    weight_files = list_weight_files(REPO_ID)
     assert weight_files == sorted(weight_files)
 
 
