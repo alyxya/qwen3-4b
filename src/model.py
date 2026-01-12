@@ -185,13 +185,14 @@ class Qwen3Model(nn.Module):
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 logits, cache_k, cache_v = self(next_input, cache_k, cache_v)  # logits: (batch, seq, vocab_size)
-                next_token = self._sample_token(logits[0, -1, :], temperature, top_k, top_p)  # (1, 1)
-                new_tokens = torch.cat([new_tokens, next_token], dim=1)  # (batch, num_generated)
+                next_tokens = self._sample_token(logits[:, -1, :], temperature, top_k, top_p)  # (batch, 1)
+                new_tokens = torch.cat([new_tokens, next_tokens], dim=1)  # (batch, num_generated)
 
-                if stop_token_ids and next_token.item() in stop_token_ids:
+                # Stop if any sequence generates a stop token
+                if stop_token_ids and any(t.item() in stop_token_ids for t in next_tokens[:, 0]):
                     break
 
-                next_input = next_token  # (1, 1)
+                next_input = next_tokens  # (batch, 1)
 
         return new_tokens, cache_k, cache_v
 
@@ -201,35 +202,36 @@ class Qwen3Model(nn.Module):
         """Sample token with temperature, top-k, and top-p filtering
 
         Args:
-            logits: (vocab_size,) - logits for next token
+            logits: (batch, vocab_size) - logits for next token per sequence
             temperature: Sampling temperature (0 for greedy/deterministic)
             top_k: Sample from top k tokens only
             top_p: Nucleus sampling threshold
 
         Returns:
-            next_token: (1, 1) - sampled token ID
+            next_tokens: (batch, 1) - sampled token IDs
         """
         # Greedy decoding (deterministic) when temperature is 0
         if temperature == 0.0:
-            next_token = torch.argmax(logits, dim=-1, keepdim=True).unsqueeze(0)  # (1,) -> (1, 1)
-            return next_token
+            return torch.argmax(logits, dim=-1, keepdim=True)  # (batch, 1)
 
         if temperature != 1.0:
-            logits = logits / temperature  # (vocab_size,)
+            logits = logits / temperature  # (batch, vocab_size)
 
         if top_k:
-            top_k_logits, top_k_indices = torch.topk(logits, top_k)  # (top_k,), (top_k,)
-            logits = torch.full_like(logits, float("-inf"))  # (vocab_size,)
-            logits[top_k_indices] = top_k_logits  # (vocab_size,)
+            top_k_logits, top_k_indices = torch.topk(logits, top_k, dim=-1)  # (batch, top_k)
+            logits = torch.full_like(logits, float("-inf"))  # (batch, vocab_size)
+            logits.scatter_(-1, top_k_indices, top_k_logits)  # (batch, vocab_size)
 
-        probs = torch.softmax(logits, dim=-1)  # (vocab_size,)
+        probs = torch.softmax(logits, dim=-1)  # (batch, vocab_size)
 
         if top_p:
-            sorted_probs, sorted_indices = torch.sort(probs, descending=True)  # (vocab_size,), (vocab_size,)
-            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)  # (vocab_size,)
-            sorted_indices_to_remove = cumulative_probs > top_p  # (vocab_size,)
-            sorted_indices_to_remove[0] = False
-            probs[sorted_indices[sorted_indices_to_remove]] = 0.0  # (vocab_size,)
-            probs = probs / probs.sum()  # (vocab_size,)
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)  # (batch, vocab_size)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)  # (batch, vocab_size)
+            # Keep tokens where cumulative prob before this token is <= top_p
+            sorted_indices_to_remove = cumulative_probs - sorted_probs > top_p  # (batch, vocab_size)
+            sorted_probs[sorted_indices_to_remove] = 0.0  # (batch, vocab_size)
+            # Reconstruct probs in original order
+            probs = torch.zeros_like(probs).scatter_(-1, sorted_indices, sorted_probs)
+            probs = probs / probs.sum(dim=-1, keepdim=True)  # (batch, vocab_size)
 
-        return torch.multinomial(probs, num_samples=1).unsqueeze(0)  # (1,) -> (1, 1)
+        return torch.multinomial(probs, num_samples=1)  # (batch, 1)
