@@ -69,15 +69,16 @@ The `generate()` method in `model.py` has important semantics:
 Example flow:
 ```python
 # Initial generation
-conversation = [1, 2, 3]  # prompt
-new_tokens, cache_k, cache_v = model.generate(conversation, max_new_tokens=5)
-conversation = conversation + new_tokens  # [1, 2, 3, 4, 5, 6, 7, 8]
+input_ids = torch.tensor([[1, 2, 3]])  # (batch, seq) - prompt as tensor
+new_tokens, cache_k, cache_v = model.generate(input_ids, max_new_tokens=5)
+# new_tokens: (batch, 5) tensor of generated token IDs
+all_ids = torch.cat([input_ids, new_tokens], dim=1)  # (batch, 8)
 
 # Continue - pass FULL conversation
 more_tokens, cache_k, cache_v = model.generate(
-    conversation, max_new_tokens=5, cache_k=cache_k, cache_v=cache_v
+    all_ids, max_new_tokens=5, cache_k=cache_k, cache_v=cache_v
 )
-conversation = conversation + more_tokens
+all_ids = torch.cat([all_ids, more_tokens], dim=1)
 ```
 
 ### KV Cache
@@ -150,9 +151,9 @@ Test coverage includes (58 tests total):
 - Remember: all model weights and activations use bfloat16
 
 ### Working with the Generate Method
-- The generate method expects `input_ids: list[int]`, not tensors
-- Returns `list[int]` of new tokens, not a tensor
-- Always returns 3 values: `(new_tokens, cache_k, cache_v)`
+- The generate method expects `input_ids: torch.Tensor` with shape `(batch, seq)` or `(seq,)`
+- Returns `(new_tokens, cache_k, cache_v)` where `new_tokens` is a tensor of shape `(batch, num_generated)`
+- Supports batched generation - each sequence in the batch is sampled independently
 - To continue generation, pass the FULL conversation history (not just new tokens)
 - Cache is automatically managed - no need to manually slice or extend it
 
