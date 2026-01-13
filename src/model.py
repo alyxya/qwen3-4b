@@ -192,7 +192,7 @@ class Qwen3Model(nn.Module):
             top_p: Nucleus sampling threshold
             cache_k/cache_v: Optional KV cache for continuation
             attention_mask: Optional mask for padded tokens (1 = keep, 0 = mask)
-            stop_token_ids: Stop if any of these tokens are generated
+            stop_token_ids: Stop once all sequences have generated one of these tokens
 
         Returns:
             new_tokens: (batch, num_generated) - only the newly generated tokens
@@ -239,6 +239,12 @@ class Qwen3Model(nn.Module):
         new_tokens = torch.empty((batch_size, 0), dtype=torch.long, device=input_ids.device)  # (batch, 0)
 
         with torch.no_grad():
+            finished = None
+            stop_ids = None
+            if stop_token_ids:
+                stop_ids = torch.tensor(stop_token_ids, device=input_ids.device)
+                finished = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
+
             for _ in range(max_new_tokens):
                 logits, cache_k, cache_v = self(
                     next_input,
@@ -247,20 +253,33 @@ class Qwen3Model(nn.Module):
                     cache_v=cache_v,
                 )  # logits: (batch, seq, vocab_size)
                 next_tokens = self._sample_token(logits[:, -1, :], temperature, top_k, top_p)  # (batch, 1)
+
+                active = None
+                if finished is not None:
+                    active = ~finished
+                    if not active.all():
+                        next_tokens = next_tokens.clone()
+                        next_tokens[~active] = stop_ids[0]
+
+                    is_stop = (next_tokens.squeeze(1)[:, None] == stop_ids[None, :]).any(dim=1)
+                    finished = finished | (active & is_stop)
+
                 new_tokens = torch.cat([new_tokens, next_tokens], dim=1)  # (batch, num_generated)
 
-                # Stop if any sequence generates a stop token
-                if stop_token_ids and any(t.item() in stop_token_ids for t in next_tokens[:, 0]):
+                if finished is not None and finished.all():
                     break
 
                 next_input = next_tokens  # (batch, 1)
                 if current_attention_mask is not None:
-                    mask_pad = torch.ones(
-                        (batch_size, next_tokens.shape[1]),
-                        device=current_attention_mask.device,
-                        dtype=current_attention_mask.dtype,
-                    )
-                    current_attention_mask = torch.cat([current_attention_mask, mask_pad], dim=1)
+                    if active is None:
+                        step_mask = torch.ones(
+                            (batch_size, next_tokens.shape[1]),
+                            device=current_attention_mask.device,
+                            dtype=current_attention_mask.dtype,
+                        )
+                    else:
+                        step_mask = active.to(dtype=current_attention_mask.dtype).unsqueeze(1)
+                    current_attention_mask = torch.cat([current_attention_mask, step_mask], dim=1)
 
         return new_tokens, cache_k, cache_v
 
