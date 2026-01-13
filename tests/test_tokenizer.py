@@ -66,6 +66,13 @@ def test_encode_unicode(tokenizer):
     assert decoded == text
 
 
+def test_encode_unicode_normalization(tokenizer):
+    """Test that NFC normalization preserves tokenization"""
+    composed = "é"
+    decomposed = "e\u0301"
+    assert tokenizer.encode(composed) == tokenizer.encode(decomposed)
+
+
 def test_special_tokens_loaded(tokenizer):
     """Test that special tokens are loaded properly"""
     assert len(tokenizer.special_tokens) > 0

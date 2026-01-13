@@ -3,6 +3,7 @@ Minimal tokenizer for Qwen3 4B - Built for inference
 """
 
 import json
+import unicodedata
 import regex as re
 from huggingface_hub import hf_hub_download
 
@@ -166,6 +167,8 @@ class Tokenizer:
         Returns:
             List of token IDs
         """
+        text = unicodedata.normalize("NFC", text)
+
         # Split text by special tokens
         parts = self.special_tokens_regex.split(text)
 
