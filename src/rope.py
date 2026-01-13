@@ -50,15 +50,29 @@ class RoPE(nn.Module):
         """
         batch_size, num_heads, seq_len, head_dim = x.shape
 
-        # Flatten position_ids if needed
-        if position_ids.dim() == 2:
-            position_ids = position_ids[0]
+        if position_ids.dim() == 1:
+            position_ids = position_ids.unsqueeze(0)
+        elif position_ids.dim() != 2:
+            raise ValueError("position_ids must be 1D or 2D")
+
+        if position_ids.shape[0] != batch_size:
+            if position_ids.shape[0] == 1:
+                position_ids = position_ids.expand(batch_size, -1)
+            else:
+                raise ValueError("position_ids batch dimension must match input")
+
+        if position_ids.shape[1] != seq_len:
+            raise ValueError("position_ids sequence length must match input")
 
         # Compute rotation frequencies (all in float32 for precision)
-        position_ids = position_ids.to(torch.float32)
-        freqs = torch.outer(position_ids, self.inv_freq)  # (seq, head_dim//2)
-        cos = torch.cat([freqs.cos(), freqs.cos()], dim=-1).unsqueeze(0).unsqueeze(0)  # (1, 1, seq, head_dim)
-        sin = torch.cat([freqs.sin(), freqs.sin()], dim=-1).unsqueeze(0).unsqueeze(0)
+        position_ids = position_ids.to(device=x.device, dtype=torch.float32)
+        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
+        inv_freq_expanded = inv_freq[None, :, None].expand(batch_size, -1, 1)
+        position_ids_expanded = position_ids[:, None, :]
+        freqs = torch.matmul(inv_freq_expanded, position_ids_expanded).transpose(1, 2)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos().unsqueeze(1)
+        sin = emb.sin().unsqueeze(1)
 
         # Apply rotation in float32 (better precision than converting cos/sin to bfloat16)
         # PyTorch automatically promotes bfloat16 * float32 -> float32

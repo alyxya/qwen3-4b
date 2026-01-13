@@ -91,6 +91,8 @@ class Qwen3Model(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,  # (batch, seq)
+        attention_mask: torch.Tensor | None = None,  # (batch, kv_seq_len) or (batch, seq_len)
+        position_ids: torch.Tensor | None = None,  # (batch, seq) or (seq,)
         cache_k: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
         cache_v: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
@@ -101,6 +103,42 @@ class Qwen3Model(nn.Module):
             cache_k: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
             cache_v: [(batch, num_kv_heads, new_cache_len, head_dim)] * num_layers
         """
+        batch_size, seq_len = input_ids.shape
+        cache_len = 0 if cache_k is None else cache_k[0].shape[2]
+
+        if attention_mask is not None:
+            if attention_mask.dim() == 1:
+                attention_mask = attention_mask.unsqueeze(0)
+            attention_mask = attention_mask.to(device=input_ids.device)
+            if attention_mask.shape[0] != batch_size:
+                if attention_mask.shape[0] == 1:
+                    attention_mask = attention_mask.expand(batch_size, -1)
+                else:
+                    raise ValueError("attention_mask batch dimension must match input")
+
+            kv_seq_len = cache_len + seq_len
+            if attention_mask.shape[1] not in (seq_len, kv_seq_len):
+                raise ValueError("attention_mask must match kv_seq_len or seq_len")
+
+        if position_ids is None:
+            if attention_mask is not None and attention_mask.shape[1] == cache_len + seq_len:
+                full_position_ids = attention_mask.long().cumsum(-1) - 1
+                full_position_ids = full_position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = full_position_ids[:, -seq_len:]
+            else:
+                position_ids = torch.arange(cache_len, cache_len + seq_len, device=input_ids.device)
+                position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+        else:
+            if position_ids.dim() == 1:
+                position_ids = position_ids.unsqueeze(0)
+            if position_ids.shape[0] != batch_size:
+                if position_ids.shape[0] == 1:
+                    position_ids = position_ids.expand(batch_size, -1)
+                else:
+                    raise ValueError("position_ids batch dimension must match input")
+            if position_ids.shape[1] != seq_len:
+                raise ValueError("position_ids sequence length must match input")
+
         hidden_states = self.embed_tokens(input_ids)  # (batch, seq, d_model)
 
         if cache_k is None:
@@ -116,6 +154,8 @@ class Qwen3Model(nn.Module):
                 hidden_states,  # (batch, seq, d_model)
                 cache_k=cache_k[layer_idx],
                 cache_v=cache_v[layer_idx],
+                attention_mask=attention_mask,
+                position_ids=position_ids,
             )
             # hidden_states: (batch, seq, d_model)
             # new_k: (batch, num_kv_heads, cache_len + seq, head_dim)
@@ -139,6 +179,7 @@ class Qwen3Model(nn.Module):
         top_p: float | None = None,
         cache_k: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
         cache_v: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
+        attention_mask: torch.Tensor | None = None,  # (batch, seq_len)
         stop_token_ids: list[int] | None = None,
     ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
         """Generate tokens autoregressively with optional KV caching
@@ -150,6 +191,7 @@ class Qwen3Model(nn.Module):
             top_k: Sample from top k tokens only
             top_p: Nucleus sampling threshold
             cache_k/cache_v: Optional KV cache for continuation
+            attention_mask: Optional mask for padded tokens (1 = keep, 0 = mask)
             stop_token_ids: Stop if any of these tokens are generated
 
         Returns:
@@ -168,6 +210,20 @@ class Qwen3Model(nn.Module):
 
         batch_size, input_len = input_ids.shape  # (batch, seq)
         cache_len = 0 if cache_k is None else cache_k[0].shape[2]
+        current_attention_mask = None
+
+        if attention_mask is not None:
+            if attention_mask.dim() == 1:
+                attention_mask = attention_mask.unsqueeze(0)
+            attention_mask = attention_mask.to(device=input_ids.device)
+            if attention_mask.shape[0] != batch_size:
+                if attention_mask.shape[0] == 1:
+                    attention_mask = attention_mask.expand(batch_size, -1)
+                else:
+                    raise ValueError("attention_mask batch dimension must match input")
+            if attention_mask.shape[1] != input_len:
+                raise ValueError("attention_mask length must match input_ids length")
+            current_attention_mask = attention_mask
 
         # Truncate cache if needed to ensure at least last token is reprocessed
         if cache_len >= input_len:
@@ -184,7 +240,12 @@ class Qwen3Model(nn.Module):
 
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                logits, cache_k, cache_v = self(next_input, cache_k, cache_v)  # logits: (batch, seq, vocab_size)
+                logits, cache_k, cache_v = self(
+                    next_input,
+                    attention_mask=current_attention_mask,
+                    cache_k=cache_k,
+                    cache_v=cache_v,
+                )  # logits: (batch, seq, vocab_size)
                 next_tokens = self._sample_token(logits[:, -1, :], temperature, top_k, top_p)  # (batch, 1)
                 new_tokens = torch.cat([new_tokens, next_tokens], dim=1)  # (batch, num_generated)
 
@@ -193,6 +254,13 @@ class Qwen3Model(nn.Module):
                     break
 
                 next_input = next_tokens  # (batch, 1)
+                if current_attention_mask is not None:
+                    mask_pad = torch.ones(
+                        (batch_size, next_tokens.shape[1]),
+                        device=current_attention_mask.device,
+                        dtype=current_attention_mask.dtype,
+                    )
+                    current_attention_mask = torch.cat([current_attention_mask, mask_pad], dim=1)
 
         return new_tokens, cache_k, cache_v
 

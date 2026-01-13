@@ -31,7 +31,12 @@ class TransformerBlock(nn.Module):
         self.mlp = MLP(d_model, intermediate_size)
 
     def forward(
-        self, x: torch.Tensor, cache_k: torch.Tensor | None = None, cache_v: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        cache_k: torch.Tensor | None = None,
+        cache_v: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through transformer block
 
@@ -39,6 +44,8 @@ class TransformerBlock(nn.Module):
             x: (batch, seq, d_model) - input hidden states
             cache_k: (batch, num_kv_heads, cache_len, head_dim) - cached keys
             cache_v: (batch, num_kv_heads, cache_len, head_dim) - cached values
+            attention_mask: (batch, kv_seq_len) or (batch, seq_len) - 1 for keep, 0 for mask
+            position_ids: (batch, seq_len) or (seq_len,) - absolute positions for RoPE
 
         Returns:
             x: (batch, seq, d_model) - output hidden states
@@ -47,7 +54,11 @@ class TransformerBlock(nn.Module):
         """
         # Attention block with residual connection
         attn_output, new_cache_k, new_cache_v = self.self_attn(
-            self.input_layernorm(x), cache_k, cache_v  # (batch, seq, d_model)
+            self.input_layernorm(x),  # (batch, seq, d_model)
+            cache_k=cache_k,
+            cache_v=cache_v,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
         )
         x = x + attn_output  # (batch, seq, d_model)
 

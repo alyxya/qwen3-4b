@@ -35,7 +35,12 @@ class Attention(nn.Module):
         self.rope = RoPE(head_dim, max_position_embeddings, rope_theta)
 
     def forward(
-        self, x: torch.Tensor, cache_k: torch.Tensor | None = None, cache_v: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        cache_k: torch.Tensor | None = None,
+        cache_v: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through attention with optional KV caching
 
@@ -43,6 +48,8 @@ class Attention(nn.Module):
             x: (batch, seq, d_model) - input hidden states
             cache_k: (batch, num_kv_heads, cache_len, head_dim) - cached keys
             cache_v: (batch, num_kv_heads, cache_len, head_dim) - cached values
+            attention_mask: (batch, kv_seq_len) or (batch, seq_len) - 1 for keep, 0 for mask
+            position_ids: (batch, seq_len) or (seq_len,) - absolute positions for RoPE
 
         Returns:
             output: (batch, seq, d_model) - attention output
@@ -52,8 +59,9 @@ class Attention(nn.Module):
         batch_size, seq_len, _ = x.shape  # (batch, seq, d_model)
 
         # Compute position IDs from cache length
-        start_pos = cache_k.shape[2] if cache_k is not None else 0
-        position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)  # (seq,)
+        if position_ids is None:
+            start_pos = cache_k.shape[2] if cache_k is not None else 0
+            position_ids = torch.arange(start_pos, start_pos + seq_len, device=x.device)  # (seq,)
 
         # Project, reshape, normalize, then transpose (matches HuggingFace order)
         q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim)
@@ -95,6 +103,38 @@ class Attention(nn.Module):
                 diagonal=kv_seq_len - seq_len + 1
             )  # (seq, kv_seq)
             scores = scores + mask  # (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
+
+        if attention_mask is not None:
+            if attention_mask.dim() == 1:
+                attention_mask = attention_mask.unsqueeze(0)
+            attention_mask = attention_mask.to(device=x.device)
+            if attention_mask.shape[0] != batch_size:
+                if attention_mask.shape[0] == 1:
+                    attention_mask = attention_mask.expand(batch_size, -1)
+                else:
+                    raise ValueError("attention_mask batch dimension must match input")
+
+            kv_seq_len = k.size(2)
+            if attention_mask.shape[1] == kv_seq_len:
+                key_mask = attention_mask
+            elif attention_mask.shape[1] == seq_len:
+                if kv_seq_len == seq_len:
+                    key_mask = attention_mask
+                else:
+                    prefix = torch.ones(
+                        (batch_size, kv_seq_len - seq_len),
+                        device=attention_mask.device,
+                        dtype=attention_mask.dtype,
+                    )
+                    key_mask = torch.cat([prefix, attention_mask], dim=1)
+            else:
+                raise ValueError("attention_mask must match kv_seq_len or seq_len")
+
+            key_mask = key_mask.to(dtype=torch.bool)
+            scores = scores.masked_fill(
+                ~key_mask[:, None, None, None, :],
+                torch.finfo(scores.dtype).min,
+            )
 
         # Softmax in float32 for numerical stability (prevents overflow/underflow in exp)
         attn_weights = torch.nn.functional.softmax(scores, dim=-1, dtype=torch.float32).to(q.dtype)
