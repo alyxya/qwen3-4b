@@ -37,30 +37,34 @@ class Tokenizer:
         ]["Regex"]
         self.pattern: re.Pattern = re.compile(pattern_str)
 
-        # Load special tokens from added_tokens
+        # Load added tokens (includes special and non-special entries)
+        self.added_tokens: dict[str, int] = {}
         self.special_tokens: dict[str, int] = {}
         if "added_tokens" in tokenizer_data:
             for token_data in tokenizer_data["added_tokens"]:
-                self.special_tokens[token_data["content"]] = token_data["id"]
+                content = token_data["content"]
+                token_id = token_data["id"]
+                self.added_tokens[content] = token_id
+                if token_data.get("special"):
+                    self.special_tokens[content] = token_id
 
         # Build reverse mapping (token_id -> token_string) for decoding
-        # Merge both regular vocab and special tokens into one mapping
+        # Merge both regular vocab and added tokens into one mapping
         self.id_to_token: dict[int, str] = {
             **{v: k for k, v in self.vocab.items()},
-            **{v: k for k, v in self.special_tokens.items()},
+            **{v: k for k, v in self.added_tokens.items()},
         }
 
         # Build byte-to-unicode mapping (GPT-2 style byte-level BPE)
         self.byte_encoder: dict[int, str] = self._build_byte_encoder()
         self.byte_decoder: dict[str, int] = {v: k for k, v in self.byte_encoder.items()}
 
-        # Create regex pattern for splitting text with special tokens
-        special_tokens_pattern = "|".join(
-            re.escape(token) for token in self.special_tokens.keys()
-        )
-        self.special_tokens_regex: re.Pattern = re.compile(
-            f"({special_tokens_pattern})"
-        )
+        # Create regex pattern for splitting text with added tokens
+        added_tokens = sorted(self.added_tokens.keys(), key=len, reverse=True)
+        added_tokens_pattern = "|".join(re.escape(token) for token in added_tokens)
+        self.added_tokens_regex: re.Pattern | None = None
+        if added_tokens_pattern:
+            self.added_tokens_regex = re.compile(f"({added_tokens_pattern})")
 
     @property
     def im_start(self) -> str:
@@ -169,16 +173,19 @@ class Tokenizer:
         """
         text = unicodedata.normalize("NFC", text)
 
-        # Split text by special tokens
-        parts = self.special_tokens_regex.split(text)
+        # Split text by added tokens (special or not)
+        if self.added_tokens_regex is not None:
+            parts = self.added_tokens_regex.split(text)
+        else:
+            parts = [text]
 
         token_ids: list[int] = []
         for part in parts:
             if not part:
                 continue
-            if part in self.special_tokens:
-                # Add special token ID directly
-                token_ids.append(self.special_tokens[part])
+            if part in self.added_tokens:
+                # Add added token ID directly
+                token_ids.append(self.added_tokens[part])
             else:
                 # Encode regular text with BPE
                 # Step 1: Pre-tokenize using regex pattern
@@ -233,6 +240,7 @@ class Tokenizer:
         messages: list[dict[str, str]],
         add_generation_prompt: bool = True,
         tokenize: bool = True,
+        tools: list[dict] | None = None,
     ) -> list[int] | str:
         """
         Apply chat template to format conversation for Qwen3 models
@@ -243,6 +251,7 @@ class Tokenizer:
             add_generation_prompt: If True, add <|im_start|>assistant to prompt
                                   the model to generate a response
             tokenize: If True, return token IDs. If False, return formatted string
+            tools: Optional list of tool specs to include in the system preamble
 
         Returns:
             List of token IDs if tokenize=True, otherwise formatted string
@@ -256,14 +265,70 @@ class Tokenizer:
         """
         formatted_parts: list[str] = []
 
+        if tools:
+            formatted_parts.append("<|im_start|>system\n")
+            if messages and messages[0].get("role") == "system":
+                system_content = messages[0].get("content", "")
+                if not isinstance(system_content, str):
+                    system_content = ""
+                formatted_parts.append(system_content + "\n\n")
+            formatted_parts.append(
+                "# Tools\n\nYou may call one or more functions to assist with the user query.\n\n"
+                "You are provided with function signatures within <tools></tools> XML tags:\n<tools>"
+            )
+            for tool in tools:
+                formatted_parts.append("\n" + json.dumps(tool, ensure_ascii=True))
+            formatted_parts.append(
+                "\n</tools>\n\nFor each function call, return a json object with function name and "
+                "arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n"
+                "{\"name\": <function-name>, \"arguments\": <args-json-object>}\n"
+                "</tool_call><|im_end|>\n"
+            )
+        elif messages and messages[0].get("role") == "system":
+            system_content = messages[0].get("content", "")
+            if not isinstance(system_content, str):
+                system_content = ""
+            formatted_parts.append(
+                f"<|im_start|>system\n{system_content}<|im_end|>\n"
+            )
+
         for i, message in enumerate(messages):
-            role = message["role"]
-            content = message["content"]
+            role = message.get("role")
+            content = message.get("content", "")
+            if not isinstance(content, str):
+                content = ""
 
-            # Add message with proper formatting
-            formatted_parts.append(f"<|im_start|>{role}\n{content}<|im_end|>\n")
+            if role in ("user", "system"):
+                if role == "system" and i == 0:
+                    continue
+                formatted_parts.append(f"<|im_start|>{role}\n{content}<|im_end|>\n")
+            elif role == "assistant":
+                formatted_parts.append(f"<|im_start|>{role}\n{content}")
+                tool_calls = message.get("tool_calls") or []
+                for idx, tool_call in enumerate(tool_calls):
+                    if (idx == 0 and content) or idx > 0:
+                        formatted_parts.append("\n")
+                    if isinstance(tool_call, dict) and "function" in tool_call:
+                        tool_call = tool_call["function"]
+                    name = tool_call.get("name") if isinstance(tool_call, dict) else ""
+                    arguments = tool_call.get("arguments") if isinstance(tool_call, dict) else {}
+                    if isinstance(arguments, str):
+                        args_text = arguments
+                    else:
+                        args_text = json.dumps(arguments, ensure_ascii=True)
+                    formatted_parts.append('<tool_call>\n{"name": "')
+                    formatted_parts.append(name)
+                    formatted_parts.append('", "arguments": ')
+                    formatted_parts.append(args_text)
+                    formatted_parts.append("}\n</tool_call>")
+                formatted_parts.append("<|im_end|>\n")
+            elif role == "tool":
+                if i == 0 or messages[i - 1].get("role") != "tool":
+                    formatted_parts.append("<|im_start|>user")
+                formatted_parts.append(f"\n<tool_response>\n{content}\n</tool_response>")
+                if i == len(messages) - 1 or messages[i + 1].get("role") != "tool":
+                    formatted_parts.append("<|im_end|>\n")
 
-        # Add generation prompt if requested
         if add_generation_prompt:
             formatted_parts.append("<|im_start|>assistant\n")
 
