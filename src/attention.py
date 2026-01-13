@@ -99,7 +99,7 @@ class Attention(nn.Module):
         if seq_len > 1:
             kv_seq_len = k.size(2)  # cache_len + seq
             mask = torch.triu(
-                torch.full((seq_len, kv_seq_len), float("-inf"), device=x.device, dtype=scores.dtype),
+                torch.full((seq_len, kv_seq_len), torch.finfo(scores.dtype).min, device=x.device, dtype=scores.dtype),
                 diagonal=kv_seq_len - seq_len + 1
             )  # (seq, kv_seq)
             scores = scores + mask  # (batch, num_kv_heads, queries_per_kv, seq, kv_seq)
