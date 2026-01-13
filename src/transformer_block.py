@@ -44,7 +44,7 @@ class TransformerBlock(nn.Module):
             x: (batch, seq, d_model) - input hidden states
             cache_k: (batch, num_kv_heads, cache_len, head_dim) - cached keys
             cache_v: (batch, num_kv_heads, cache_len, head_dim) - cached values
-            attention_mask: (batch, kv_seq_len) or (batch, seq_len) - 1 for keep, 0 for mask
+            attention_mask: (batch, kv_seq_len) - 1 for keep, 0 for mask
             position_ids: (batch, seq_len) or (seq_len,) - absolute positions for RoPE
 
         Returns:

@@ -48,7 +48,7 @@ class Attention(nn.Module):
             x: (batch, seq, d_model) - input hidden states
             cache_k: (batch, num_kv_heads, cache_len, head_dim) - cached keys
             cache_v: (batch, num_kv_heads, cache_len, head_dim) - cached values
-            attention_mask: (batch, kv_seq_len) or (batch, seq_len) - 1 for keep, 0 for mask
+            attention_mask: (batch, kv_seq_len) - 1 for keep, 0 for mask
             position_ids: (batch, seq_len) or (seq_len,) - absolute positions for RoPE
 
         Returns:
@@ -115,20 +115,9 @@ class Attention(nn.Module):
                     raise ValueError("attention_mask batch dimension must match input")
 
             kv_seq_len = k.size(2)
-            if attention_mask.shape[1] == kv_seq_len:
-                key_mask = attention_mask
-            elif attention_mask.shape[1] == seq_len:
-                if kv_seq_len == seq_len:
-                    key_mask = attention_mask
-                else:
-                    prefix = torch.ones(
-                        (batch_size, kv_seq_len - seq_len),
-                        device=attention_mask.device,
-                        dtype=attention_mask.dtype,
-                    )
-                    key_mask = torch.cat([prefix, attention_mask], dim=1)
-            else:
-                raise ValueError("attention_mask must match kv_seq_len or seq_len")
+            if attention_mask.shape[1] != kv_seq_len:
+                raise ValueError("attention_mask must match kv_seq_len")
+            key_mask = attention_mask
 
             key_mask = key_mask.to(dtype=torch.bool)
             scores = scores.masked_fill(

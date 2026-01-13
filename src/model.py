@@ -91,7 +91,7 @@ class Qwen3Model(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,  # (batch, seq)
-        attention_mask: torch.Tensor | None = None,  # (batch, kv_seq_len) or (batch, seq_len)
+        attention_mask: torch.Tensor | None = None,  # (batch, kv_seq_len)
         position_ids: torch.Tensor | None = None,  # (batch, seq) or (seq,)
         cache_k: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
         cache_v: list[torch.Tensor] | None = None,  # [(batch, num_kv_heads, cache_len, head_dim)] * num_layers
@@ -117,8 +117,8 @@ class Qwen3Model(nn.Module):
                     raise ValueError("attention_mask batch dimension must match input")
 
             kv_seq_len = cache_len + seq_len
-            if attention_mask.shape[1] not in (seq_len, kv_seq_len):
-                raise ValueError("attention_mask must match kv_seq_len or seq_len")
+            if attention_mask.shape[1] != kv_seq_len:
+                raise ValueError("attention_mask must match kv_seq_len")
 
         if position_ids is None:
             if attention_mask is not None and attention_mask.shape[1] == cache_len + seq_len:
@@ -191,7 +191,7 @@ class Qwen3Model(nn.Module):
             top_k: Sample from top k tokens only
             top_p: Nucleus sampling threshold
             cache_k/cache_v: Optional KV cache for continuation
-            attention_mask: Optional mask for padded tokens (1 = keep, 0 = mask)
+            attention_mask: Optional mask for padded tokens (1 = keep, 0 = mask), same length as input_ids
             stop_token_ids: Stop once all sequences have generated one of these tokens
 
         Returns:

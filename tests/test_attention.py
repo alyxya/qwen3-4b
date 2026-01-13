@@ -83,6 +83,27 @@ def test_attention_with_cache(attention_layer, config):
     assert cache_v_new.shape[2] == prompt_len + 1
 
 
+def test_attention_mask_requires_full_kv_len(attention_layer, config):
+    """Ensure attention_mask matches full KV length when using cache."""
+    batch_size = 1
+    d_model = config["hidden_size"]
+
+    prompt_len = 3
+    x_prompt = torch.randn(batch_size, prompt_len, d_model)
+    _, cache_k, cache_v = attention_layer(x_prompt)
+
+    x_next = torch.randn(batch_size, 1, d_model)
+    attention_mask = torch.ones(batch_size, 1)
+
+    with pytest.raises(ValueError):
+        attention_layer(
+            x_next,
+            cache_k=cache_k,
+            cache_v=cache_v,
+            attention_mask=attention_mask,
+        )
+
+
 def test_attention_causal_mask(attention_layer, config):
     """Test that causal mask prevents attending to future tokens"""
     batch_size = 1
