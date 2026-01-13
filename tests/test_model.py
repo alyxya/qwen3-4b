@@ -127,3 +127,59 @@ def test_model_forward_with_cache(model, config):
     assert cache_k2[0].shape[2] == seq_len + 1  # seq_len dimension should grow
     assert cache_v2[0].shape[2] == seq_len + 1
     assert logits2.shape == (batch_size, 1, config["vocab_size"])
+
+
+def test_generate_per_sequence_stop():
+    """Ensure generation stops per sequence, not per batch."""
+
+    class DummyModel(Qwen3Model):
+        def __init__(
+            self,
+            device: str | torch.device,
+            step_tokens: list[list[int]],
+        ) -> None:
+            torch.nn.Module.__init__(self)
+            self.device = device if isinstance(device, torch.device) else torch.device(device)
+            self._step_tokens = step_tokens
+            self._step = 0
+            self.vocab_size = max(max(row) for row in step_tokens) + 1
+
+        def forward(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: torch.Tensor | None = None,
+            position_ids: torch.Tensor | None = None,
+            cache_k: list[torch.Tensor] | None = None,
+            cache_v: list[torch.Tensor] | None = None,
+        ) -> tuple[torch.Tensor, list[torch.Tensor] | None, list[torch.Tensor] | None]:
+            batch_size, seq_len = input_ids.shape
+            logits = torch.full(
+                (batch_size, seq_len, self.vocab_size),
+                -1e9,
+                device=input_ids.device,
+            )
+            step_ids = self._step_tokens[min(self._step, len(self._step_tokens) - 1)]
+            for batch_idx, token_id in enumerate(step_ids):
+                logits[batch_idx, -1, token_id] = 0.0
+            self._step += 1
+            return logits, cache_k, cache_v
+
+    step_tokens = [
+        [2, 5],  # seq0 stops immediately, seq1 continues
+        [2, 2],  # seq1 stops on the next step
+    ]
+    model = DummyModel(
+        device="cpu",
+        step_tokens=step_tokens,
+    )
+    input_ids = torch.tensor([[1], [1]])
+    new_tokens, _, _ = model.generate(
+        input_ids=input_ids,
+        max_new_tokens=5,
+        temperature=0.0,
+        stop_token_ids=[2],
+    )
+
+    assert new_tokens.shape == (2, 2)
+    assert new_tokens[0].tolist() == [2, 2]
+    assert new_tokens[1].tolist() == [5, 2]
