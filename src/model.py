@@ -40,6 +40,7 @@ class Qwen3Model(nn.Module):
         # that will be immediately overwritten by pretrained weights
         with torch.device("meta"):
             self.embed_tokens = Embedding(self.vocab_size, self.d_model)
+            self.lm_head = nn.Linear(self.d_model, self.vocab_size, bias=False)
             self.layers = nn.ModuleList(
                 [
                     TransformerBlock(
@@ -76,7 +77,7 @@ class Qwen3Model(nn.Module):
         )
 
         # Weight tying: lm_head shares weights with embed_tokens
-        self.lm_head = self.embed_tokens.weight
+        self.lm_head.weight = self.embed_tokens.weight
 
         # Warn about mismatches (lm_head is expected to be missing due to weight tying)
         missing_keys = [k for k in missing_keys if "lm_head" not in k]
@@ -164,9 +165,7 @@ class Qwen3Model(nn.Module):
             new_cache_v.append(new_v)
 
         hidden_states = self.norm(hidden_states)  # (batch, seq, d_model)
-        logits = torch.einsum(
-            "bsd,vd->bsv", hidden_states, self.lm_head
-        )  # (batch, seq, vocab_size)
+        logits = self.lm_head(hidden_states)  # (batch, seq, vocab_size)
 
         return logits, new_cache_k, new_cache_v
 

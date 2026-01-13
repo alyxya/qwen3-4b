@@ -238,7 +238,7 @@ def test_model_dtype(model):
 
     # Check final norm and lm_head
     assert model.norm.weight.dtype == torch.bfloat16
-    assert model.lm_head.dtype == torch.bfloat16
+    assert model.lm_head.weight.dtype == torch.bfloat16
 
 
 @pytest.mark.slow
