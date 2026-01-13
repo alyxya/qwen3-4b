@@ -45,6 +45,57 @@ TOOLS = {
     "divide": divide,
 }
 
+TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "add",
+            "description": "Add two numbers",
+            "parameters": {
+                "type": "object",
+                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                "required": ["a", "b"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subtract",
+            "description": "Subtract b from a",
+            "parameters": {
+                "type": "object",
+                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                "required": ["a", "b"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "multiply",
+            "description": "Multiply two numbers",
+            "parameters": {
+                "type": "object",
+                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                "required": ["a", "b"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "divide",
+            "description": "Divide a by b",
+            "parameters": {
+                "type": "object",
+                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                "required": ["a", "b"],
+            },
+        },
+    },
+]
+
 
 def parse_tool_call(text: str) -> dict | None:
     """Extract tool call JSON from model response"""
@@ -88,27 +139,13 @@ def main():
     # System prompt explaining tool calling
     system_prompt = """You are a calculator assistant. You MUST use tools for ALL arithmetic operations. Never calculate numbers directly.
 
-Available tools:
-- add(a, b): Add two numbers
-- subtract(a, b): Subtract b from a
-- multiply(a, b): Multiply two numbers
-- divide(a, b): Divide a by b
-
 IMPORTANT RULES:
 1. You MUST call a tool for EVERY arithmetic operation - never compute numbers yourself
 2. For multi-step calculations, call one tool at a time and wait for the result
 3. After receiving a tool result, if more calculations are needed, call another tool
 4. Only provide the final answer after all tool calls are complete
 
-To call a tool, respond with ONLY:
-<tool_call>
-{"name": "tool_name", "arguments": {"a": value1, "b": value2}}
-</tool_call>
-
-Example for "What is 5 + 3 multiplied by 2?":
-Step 1: Call add(5, 3) -> get result 8
-Step 2: Call multiply(8, 2) -> get result 16
-Step 3: Provide final answer: 16"""
+Example: For "What is 5 + 3 multiplied by 2?" call add(5, 3), then multiply(8, 2), then answer."""
 
     # Test questions - starting with complex multi-step calculations
     test_questions = [
@@ -146,7 +183,8 @@ Step 3: Provide final answer: 16"""
             text = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=True
+                add_generation_prompt=True,
+                tools=TOOL_SPECS,
             )
             input_ids = tokenizer.encode(text)
             input_tensor = torch.tensor([input_ids])  # (1, seq)
