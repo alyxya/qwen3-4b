@@ -193,7 +193,9 @@ Example: For "What is 5 + 3 multiplied by 2?" call add(5, 3), then multiply(8, 2
             new_tokens, cache_k, cache_v = model.generate(
                 input_ids=input_tensor,
                 max_new_tokens=200,
-                temperature=0.0,  # Deterministic greedy decoding
+                temperature=0.7,
+                top_p=0.8,
+                top_k=20,
                 cache_k=cache_k,
                 cache_v=cache_v,
                 stop_token_ids=[tokenizer.im_end_id, tokenizer.endoftext_id],

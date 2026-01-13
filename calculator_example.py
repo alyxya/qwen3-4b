@@ -188,8 +188,10 @@ Example: For "What is 5 + 3 multiplied by 2?" call add(5, 3), then multiply(8, 2
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=200,
-                    temperature=0.0,  # Deterministic generation
-                    do_sample=False,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.8,
+                    top_k=20,
                 )
 
             response = tokenizer.decode(
